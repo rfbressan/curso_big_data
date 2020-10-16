@@ -1,0 +1,18 @@
+prefix: /home/rafael/Documentos/Cursos/Big Data Puc-Minas/curso_big_data
+name: big_data_puc
+dependencies:
+  - python
+  - pip
+  - scipy
+  - numpy
+  - matplotlib
+  - seaborn
+  - pandas
+  - scikit-learn
+  - py-xgboost
+  - pylint
+  - ipykernel
+  - statsmodels
+  - pip:
+    - econml
+
