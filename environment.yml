@@ -13,6 +13,7 @@ dependencies:
   - pylint
   - ipykernel
   - statsmodels
+  - autopep8
   - pip:
     - econml
 
