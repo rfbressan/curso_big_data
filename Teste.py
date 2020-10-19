@@ -1,3 +1,4 @@
+# DML use case with continuous treatment
 import econml
 import warnings
 warnings.filterwarnings('ignore')
@@ -96,3 +97,21 @@ ax.plot(X_test, expected_te, 'b--', label='True Effect')
 ax.set_ylabel('Treatment Effect')
 ax.set_xlabel('X')
 ax.legend()
+fig.show()
+
+# Model selection based on MSE of final stage Y residual (godness-of-fit)
+score = {}
+score['DML default'] = est.score(Y_val, T_val, X_val, W_val)
+score['DML poly 3'] = est1.score(Y_val, T_val, X_val, W_val)
+score['DML poly Lasso'] = est2.score(Y_val, T_val, X_val, W_val)
+score['DML Random Forest'] = est3.score(Y_val, T_val, X_val, W_val)
+print('Best model based on MSE of Y residuals is:', min(score, key=lambda x: score.get(x)))
+
+# Model selection based on MSE of treatment effect (Unfeasible. Do not see the true effect)
+score_te = {}
+score_te['DML default'] = ((expected_te - te_pred)**2).mean()
+score_te['DML poly 3'] = ((expected_te - te_pred1)**2).mean()
+score_te['DML poly Lasso'] = ((expected_te - te_pred2)**2).mean()
+score_te['DML Random Forest'] = ((expected_te - te_pred3)**2).mean()
+print('Best model based on UNFEASIBLE MSE of true TE residuals is:', min(score_te, key=lambda x: score_te.get(x)))
+
