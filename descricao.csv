@@ -1,0 +1,74 @@
+variavel,descricao
+treatment,"Treatment variable: 0 (No_mailing), 1 (Baseline), 2 (Threat), 3 (Info), 4 (Info&Threat), 5 (Moral), 6 (Moral&Threat)"
+mailing,"0 (No_mailing), 1 (treatment 1-6)"
+threat,"Dummy variable equal to 1 if treatment is 2, 4, or 6."
+info,Dummy variable equal to 1 if treatment is 3 or 4.
+appeal,Dummy variable equal to 1 if treatment is 5 or 6.
+i_tinf,Dummy variable equal to 1 if treatment is 4.
+i_tapp,Dummy variable equal to 1 if treatment is 6.
+resp_A,"Dummy variable equal to 1 if individual registered, i.e. started paying the fee within the first 50 days after sending the mailing."
+resp_A_25,Dummy variable equal to 1 if individual registered within the first 25 days after sending the mailing.
+resp_A_75,Dummy variable equal to 1 if individual registered within the first 75 days after sending the mailing.
+resp_A_100,Dummy variable equal to 1 if individual registered within the first 100 days after sending the mailing.
+resp_B,Dummy variable equal to 1 if individual updated contract details within 50 days.
+resp_all,Dummy variable equal to 1 if individual registered or updated contract details.
+deregistration,"Dummy variable equal to 1 if individual deregistered (available only for a subgroup of 2,291 individuals, see Section 5.3)"
+delivered,Dummy variable equal to 1 if the mailing was delivered to the individual (see Footnote 13)
+evasion_1,"Dummy variable equal 1 if individual lives in municipality with a high evasion rate (top quartile), see Section 5.5."
+evasion_2,"Dummy variable equal 1 if individual lives in municipality with a high evasion rate (top tercile), see Section 5.5."
+threat_evasion_D1,Interaction threat × evasion_1
+appeal_evasion_D1,Interaction appeal × evasion_1
+info_evasion_D1,Interaction info × evasion_1
+threat_evasion_D2,Interaction threat × evasion_2
+appeal_evasion_D2,Interaction appeal × evasion_2
+info_evasion_D2,Interaction info × evasion_2
+gender,Dummy variable equal to 1 if individual is male.
+age,"Age of the individual (only available for a subsample of 16,281 recipients, see Table 1)."
+pop2005,Number of inhabitants in residence municipality 2005.
+pop_density2005,Number of inhabitants normalized by size (in km2) in residence municipality 2005.
+compliance,"Pre-experimental compliance rate (registered no. of households normalized by total no. of households per municipality, see Table 1), excl. secondary residences."
+compliance_t,"Pre-experimental compliance rate (registered no. of households normalized by total no. of households per municipality), incl. secondary residences. "
+vo_r,Vote share right parties (parliamentary election) per municipality 2006.
+vo_cr,Vote share center right parties (parliamentary election) per municipality 2006.
+vo_cl,Vote share center left parties (parliamentary election) per municipality 2006.
+vo_l,Vote share left parties (parliamentary election) per municipality 2006.
+inc_aver,Average yearly gross income in Euro per municipality 2003.
+edu_aver,Average level of education per municipality 2001.
+edu_lo,Share of inhabitants with low education per municipality 2001.
+edu_mi,Share of inhabitants with middle education per municipality 2001.
+edu_hi,Share of inhabitants with high education per municipality 2001.
+age_aver,Average age of inhabitants per municipality 2001.
+age0_30,Share of inhabitants with age below 30 per municipality 2001.
+age30_60,Share of inhabitants with age between 30 and 60 per municipality 2001.
+fam_singl,Share of single households per municipality 2001.
+fam_marri,Share of households with married couples per municipality 2001.
+fam_divor_widow,Share of households with divorced or widowed inhabitants per municipality 2001.
+nat_A,Share of inhabitants with Austrian Nationality per municipality 2001.
+nat_EU,Share of inhabitants with Nationality from a European Union member country per municipality 2001.
+nat_nonEU,Share of inhabitants with Nationality from country outside European Union per municipality 2001.
+nat_nonA,Share of inhabitants with Nationality outside Austria per municipality 2001.
+j_employ,Share of employed inhabitants per municipality 2001.
+j_unempl,Share of unemployed inhabitants per municipality 2001.
+j_retire,Share of retired inhabitants per municipality 2001.
+j_house,Share of homemakers per municipality 2001.
+j_studen,Share of students per municipality 2001.
+rel_kath,Share of Roman Catholic denomination per municipality 2001.
+rel_evan,Share of Evangelic denomination per municipality 2001.
+rel_isla,Share of Islamic denomination per municipality 2001.
+rel_obk,Share of no religious denomination per municipality 2001.
+rel_orth_other,Share of other Christian Orthodox and other denominations per municipality 2001.
+pers2,Share of 2-person households per municipality 2001.
+pers3,Share of 3-person households per municipality 2001.
+pers4,Share of 4-person households per municipality 2001.
+pers5more,Share of 5 and more-person households per municipality 2001.
+coverage,Fraction of mailings relative to the population per municipality 2005.
+bgld,Dummy variable equal to 1 if Burgenland.
+kaern,Dummy variable equal to 1 if Carinthia.
+noe,Dummy variable equal to 1 if Lower Austria.
+ooe,Dummy variable equal to 1 if Upper Austria.
+salzbg,Dummy variable equal to 1 if Salzburg.
+steierm,Dummy variable equal to 1 if Styria.
+tirol,Dummy variable equal to 1 if Tirol.
+vlbg,Dummy variable equal to 1 if Vorarlberg.
+wien,Dummy variable equal to 1 if Vienna.
+schober,Dummy variable equal to 1 if individual’s address is not from residential register but from private marketing company.

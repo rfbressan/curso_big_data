@@ -3,9 +3,12 @@
 #' Loading libraries
 library(sandwich)
 library(fixest)
-library(paramtest)
+# library(paramtest)
+library(tibble)
 library(dplyr)
 library(tidyr)
+library(glue)
+library(skimr)
 library(knitr)
 library(kableExtra)
 library(stargazer)
@@ -19,13 +22,102 @@ data <- haven::read_dta("data_final.dta") %>%
 
 #' Table counting the number of recipients in each treatment
 #'
-data$treatment <- as.factor(data$treatment)
+data$treatment <- factor(data$treatment)
 t_sizes <- as.vector(table(data$treatment))
 
-buckets <- data.frame(Buckets = c("T0", "T1", "T2", "T3", "T4", "T5", "T6"),
-                      Description = c("No-mailing", "Baseline", "Threat", "Information",
-                                      "Info&Threat", "Moral", "Moral&Threat"),
-                      Size = t_sizes)
+buckets <- data.frame(treatment = sort(unique(data$treatment)),
+                      Buckets = c("T0", "T1", "T2", "T3", "T4", "T5", "T6"),
+                      Description = c("Sem Correio", "Correio", "Ameaça", "Info",
+                                      "Info&Ameaça", "Moral", "Moral&Ameaça"),
+                      Size = t_sizes) %>% 
+  mutate(Prop = Size / nrow(data))
+
+kbl(buckets[-1], format = "latex", booktabs = TRUE, label = "descritivas1",
+    col.names = c("Tratamento", "Descrição", "Observações", "Proporção"),
+    caption = "Distribuição dos tratamentos na amostra.") %>% 
+  kable_styling(latex_options = c("HOLD_position")) %>% 
+  kable_classic(full_width = FALSE) %>% 
+  save_kable("./Tables/table_descritivas1.tex")
+
+#' Junta de volta as inforamacoes de bucket e descricao para os dados
+data <- data %>% 
+  left_join(buckets[, c("treatment", "Buckets", "Description")], by = "treatment")
+#' Descriptive statistics for the database
+#' Variables with NA values
+skim_df <- data %>% 
+  skim_without_charts()
+
+na_df <- skim_df %>% 
+  filter(n_missing > 0) %>% 
+  select(skim_variable, n_missing, complete_rate)
+
+kbl(na_df, digits = 2, format = "latex", booktabs = TRUE, label = "missings",
+    col.names = c("Variável", "No. Faltantes", "Completude"),
+    caption = "Dados faltantes na amostra.") %>% 
+  kable_styling(latex_options = c("HOLD_position")) %>% 
+  kable_classic(full_width = FALSE) %>% 
+  footnote(general_title = "Nota:",
+           general = "Completude refere-se a proporção de linhas preenchidas contra faltantes, e varia de zero a um.",
+           threeparttable = TRUE) %>% 
+  save_kable("./Tables/table_missings.tex")
+
+#' Exploratory analysis
+#' Attrtion problem: Only if mailing = 1, then set missings in delivered equal 
+#' to zero and then analyze the balance of covariates on the subset of not 
+#' delivered mails
+attrition_level <- data %>% 
+  filter(mailing == 1) %>% 
+  group_by(treatment, Buckets, Description) %>% 
+  summarise(mail_count = n(),
+            deliv_na_count = sum(is.na(delivered)),
+            deliv_0_count = sum(delivered == 0),
+            attr_rate = (deliv_na_count + deliv_0_count) / nrow(cur_data()))
+chi_test <- chisq.test(attrition_level$deliv_0_count, 
+                       p = attrition_level$mail_count, rescale.p = TRUE)
+atrito_foot <- glue("Na média total a taxa de atrito foi de {format(mean(attrition_level$attr_rate), digits = 4)} e não houve diferença entre tratamentos, como aponta o teste qui-quadrado de Pearson para dados de contagem, com p-valor de {format(chi_test$p.value, digits = 4)}.")
+#' Tabela detalhando o nivel de atrito por tratamento
+kbl(attrition_level[-1], digits = 4, format = "latex", booktabs = TRUE, 
+    label = "atrito-level", 
+    col.names = c("Tratamento", "Descrição", "Cartas", "Entregues NA", 
+                  "Não Entregues", "Taxa Atrito"),
+    caption = "Taxa de atrito por tratamento.") %>% 
+  kable_styling(latex_options = c("HOLD_position")) %>% 
+  kable_classic(full_width = FALSE) %>% 
+  footnote(general_title = "Nota:", general = atrito_foot,
+           threeparttable = TRUE) %>% 
+  save_kable("./Tables/table_atrito_level.tex")
+#' Todos os NAs se referem ao grupo de controle, mas houve um pouco de atrito.
+#' Verificar balanceamento de variaveis para aqueles que atritaram
+atrito_controle <- data %>% 
+  filter(mailing == 0 | (mailing == 1 & delivered == 0))
+
+attr_bal <- atrito_controle %>% 
+  group_by(treatment, Buckets) %>% 
+  summarise(across(c(gender, age_aver, inc_aver, pop2005, pop_density2005, compliance), 
+                   mean, na.rm = TRUE))
+#' Teste anova para diferenca de medias
+attr_anova <- tibble(var = c("gender", "age_aver", "inc_aver", "pop2005", 
+                                    "pop_density2005", "compliance")) %>% 
+  rowwise() %>% 
+  mutate(anov = list(anova(lm(paste0(var, "~treatment"), data = atrito_controle))),
+         pval = anov["treatment", "Pr(>F)"]) %>% 
+  select(var,pval) %>% 
+  pivot_wider(names_from = var, values_from = pval) %>% 
+  add_column(Buckets = "Anova p-valor", .before = 1)
+
+atr_bal_foot <- "Gênero igual a zero para mulher. Demais variáveis são denominadas em nível municipal, por exemplo Idade refere-se a idade média dos habitantes do município de residência do indivíduo."
+attr_bal[-1] %>% 
+  bind_rows(attr_anova) %>% 
+  kbl(digits = 4, format = "latex", booktabs = TRUE, label = "atrito",
+      col.names = c("Tratamento", "Gênero", "Idade", "Renda",
+                    "População", "Dens. pop.", "Compliance"),
+      caption = "Análise de atrito. Balanceamento de variáveis selecionadas") %>% 
+  kable_styling(latex_options = c("HOLD_position")) %>% 
+  kable_classic(full_width = FALSE) %>% 
+  footnote(general_title = "Nota:",
+           threeparttable = TRUE,
+           general = atr_bal_foot)
+  save_kable("./Tables/table_atrito_bal.tex")
 #' Replication of tables 1 and 2 of Fellner et al.
 #' 
 #' Table 1
@@ -53,12 +145,12 @@ tab1 <- bind_rows(ngtab1,
                   bind_cols(buckets, gtab1) %>% 
                     select(-treatment),
                   anov_row) %>% 
-  select(-Size, Size) %>% 
-  kbl(digits = 2, booktabs = TRUE, format = "latex", label = "tab1",     
-      col.names = c("Tratamento", "Descrição", "Gênero", "Idade",
-                    "População", "Densidade pop.", "Compliance",
-                    "Observações"),
-      caption = "Balanceamento de características individuais e por município por tipo de tratamento.") %>% 
+  select(-Size, Size) 
+kbl(tab1, digits = 2, booktabs = TRUE, format = "latex", label = "tab1",     
+    col.names = c("Tratamento", "Descrição", "Gênero", "Idade",
+                  "População", "Densidade pop.", "Compliance",
+                  "Observações"),
+    caption = "Balanceamento de características individuais e por município por tipo de tratamento.") %>% 
   kable_styling(latex_options = "HOLD_position", font_size = 10) %>% 
   kable_classic(full_width = FALSE) %>% 
   save_kable(file = "./Tables/table1.tex")
@@ -75,6 +167,7 @@ reg_24 <- feols(resp_B~threat+appeal+info+i_tinf+i_tapp, data = delivered)
 reg_25 <- feols(resp_all~threat+appeal+info, data = delivered)
 reg_26 <- feols(resp_all~threat+appeal+info+i_tinf+i_tapp, data = delivered)
 
+#' Dicionário para o nome das variáveis nas tabelas
 fixest::setFixest_dict(c(resp_A = "Registro", 
                          resp_B = "Atual. Contratual", 
                          resp_all = "Resposta Geral",
@@ -93,10 +186,17 @@ fixest::setFixest_dict(c(resp_A = "Registro",
                          info_evasion_D2 = "Info x Evasão",
                          evasion_2 = "Evasão",
                          "(Intercept)" = "Constante"))
+#' Ajusta o estilo das tabelas
+est_style = list(depvar = "title:Dep. Var.",
+                 model = "title:Modelo",
+                 var = "title:\\emph{Variáveis}",
+                 stats = "title:\\emph{Estatísticas de diagnóstico}",
+                 notes = "title:\\emph{\\medskip Notas:}")
 #' Create table2
 esttex(reg_21, reg_22, reg_23, reg_24, reg_25, reg_26,
        file = "./Tables/table2.tex",
        label = "tab:tab2",
+       style = est_style,
        replace = TRUE,
        se = "White",
        digits = 3,
@@ -124,7 +224,8 @@ Z_extended <- gsub("\\s+", "+",
                    "pop_density2005 pop2005 nat_EU nat_nonEU fam_marri fam_divor_widow
                    edu_hi edu_lo rel_evan rel_isla rel_orth_other rel_obk pers2 pers3 pers4
                    pers5more  vo_r vo_cl vo_l  j_unempl j_retire j_house j_studen
-                   inc_aver age0_30 age30_60  bgld kaern noe ooe steierm tirol vlbg")
+                   inc_aver age0_30 age30_60  bgld kaern noe ooe salzbg steierm 
+                   tirol vlbg wien schober")
 #' Regressões para efeitos heterogêneos
 #' formulas
 form_str <- paste0("resp_A~threat+appeal+info+gender+compliance_t+", Z_extended)
@@ -154,6 +255,7 @@ esttex(het_reg_pop$lm_model, het_reg_den$lm_model, het_reg_rend$lm_model,
        het_reg_vot$lm_model,
        file = "./Tables/tablec1.tex",
        label = "tab:tabc1",
+       style = est_style,
        replace = TRUE,
        se = "White",
        digits = 3,
@@ -450,6 +552,18 @@ rhs2 <- paste0(gsub("\\s+", "+",
                Z)
 reg_31 <- feols(as.formula(paste0("resp_A~", rhs1)), data = delivered)
 reg_32 <- feols(as.formula(paste0("resp_A~", rhs2)), data = delivered)
+
+#' Análise exploratória dos dados
+#' 
+#' Dados faltantes?
+#' 
+#' Sumário com as descritivas das variáveis de renda, educação, religião,
+#' inclinação política, idade, emprego, etc.
+#' 
+#' sel_cols <- c("inc_aver", "edu_aver", "age", "gender")
+#' skimr(data[sel_cols])
+#' 
+#' Algumas correlações interessantes
 #' 
 #' Save workspace
 #' 
