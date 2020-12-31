@@ -4,9 +4,7 @@
 library(sandwich)
 library(fixest)
 # library(paramtest)
-library(tibble)
-library(dplyr)
-library(tidyr)
+library(tidyverse)
 library(glue)
 library(skimr)
 library(knitr)
@@ -108,7 +106,7 @@ attr_anova <- tibble(var = c("gender", "age_aver", "inc_aver", "pop2005",
 atr_bal_foot <- "Gênero igual a zero para mulher. Demais variáveis são denominadas em nível municipal, por exemplo Idade refere-se a idade média dos habitantes do município de residência do indivíduo."
 attr_bal[-1] %>% 
   bind_rows(attr_anova) %>% 
-  kbl(digits = 4, format = "latex", booktabs = TRUE, label = "atrito",
+  kbl(digits = 4, format = "latex", booktabs = TRUE, label = "atrito-bal",
       col.names = c("Tratamento", "Gênero", "Idade", "Renda",
                     "População", "Dens. pop.", "Compliance"),
       caption = "Análise de atrito. Balanceamento de variáveis selecionadas") %>% 
@@ -116,19 +114,48 @@ attr_bal[-1] %>%
   kable_classic(full_width = FALSE) %>% 
   footnote(general_title = "Nota:",
            threeparttable = TRUE,
-           general = atr_bal_foot)
+           general = atr_bal_foot) %>% 
   save_kable("./Tables/table_atrito_bal.tex")
+#' Histograma com designacao de tratamento e atrito
+hist1 <- data %>% 
+  filter(treatment %in% c("0", "6"), pop_density2005 < 30) %>% 
+  select(treatment, pop_density2005) %>% 
+  ggplot(aes(x = pop_density2005, y = ..density.., fill = treatment)) +
+  geom_histogram(bins = 50, alpha = 0.8, position = "dodge") +
+  labs(x = "",
+       y = "Frequência relativa",
+       title = "Tratamento designado") +
+  guides(fill = guide_legend(title = "Tratamento")) +
+  scale_fill_discrete(type = c("blue", "red")) +
+  theme_classic()
+
+hist2 <- atrito_controle %>% 
+  filter(treatment %in% c("0", "6"), pop_density2005 < 30) %>% 
+  select(treatment, pop_density2005) %>% 
+  ggplot(aes(x = pop_density2005, y = ..density.., fill = treatment)) +
+  geom_histogram(bins = 50, alpha = 0.8, position = "dodge") +
+  labs(x = "Densidade Populacional (hab/km2)",
+       y = "Frequência relativa",
+       title = "Atrito") +
+  guides(fill = guide_legend(title = "Tratamento")) +
+  scale_fill_discrete(type = c("blue", "red")) +
+  theme_classic()
+png("./Figs/fig_atr_hist.png")
+gridExtra::grid.arrange(hist1, hist2)
+dev.off()
+
 #' Replication of tables 1 and 2 of Fellner et al.
 #' 
 #' Table 1
 gtab1 <- data %>% 
-  group_by(treatment) %>% 
-  summarise(across(gender:compliance, mean, na.rm = TRUE))
-ngtab1 <- data %>% 
-  summarise(Buckets = "Total", Description = "", Size = n(), 
-            across(gender:compliance, mean, na.rm = TRUE))
+  group_by(treatment, Buckets, Description) %>% 
+  summarise(across(c(gender, age_aver, inc_aver, pop2005, pop_density2005, compliance),
+                   mean, na.rm = TRUE))
+# ngtab1 <- data %>% 
+#   summarise(Buckets = "Total", Description = "", Size = n(), 
+#             across(gender:compliance, mean, na.rm = TRUE))
 
-anova_results <- data.frame(var = c("gender", "age", "pop2005", 
+anova_results <- data.frame(var = c("gender", "age_aver", "inc_aver", "pop2005", 
                                     "pop_density2005", "compliance")) %>% 
   rowwise() %>% 
   mutate(anov = list(anova(lm(paste0(var, "~treatment"), data = data))),
@@ -137,22 +164,20 @@ anov_row <- anova_results %>%
   select(-anov) %>% 
   pivot_wider(names_from = var, values_from = pval) %>% 
   mutate(Buckets = "Anova: ",
-         Description = "p-values",
-         Size = NA_integer_) %>% 
-  select(Buckets, Description, Size, everything())
+         Description = "p-values") %>% 
+  select(Buckets, Description, everything())
 
-tab1 <- bind_rows(ngtab1, 
-                  bind_cols(buckets, gtab1) %>% 
-                    select(-treatment),
-                  anov_row) %>% 
-  select(-Size, Size) 
-kbl(tab1, digits = 2, booktabs = TRUE, format = "latex", label = "tab1",     
-    col.names = c("Tratamento", "Descrição", "Gênero", "Idade",
-                  "População", "Densidade pop.", "Compliance",
-                  "Observações"),
-    caption = "Balanceamento de características individuais e por município por tipo de tratamento.") %>% 
+gtab1[-1] %>% 
+  bind_rows(anov_row) %>% 
+  kbl(digits = 4, booktabs = TRUE, format = "latex", label = "tab1",     
+      col.names = c("Tratamento", "Descrição", "Gênero", "Idade", "Renda",
+                    "População", "Dens. pop.", "Compliance"),
+      caption = "Balanceamento de características individuais e por município por tipo de tratamento.") %>% 
   kable_styling(latex_options = "HOLD_position", font_size = 10) %>% 
   kable_classic(full_width = FALSE) %>% 
+  footnote(general_title = "Nota:",
+           threeparttable = TRUE,
+           general = atr_bal_foot) %>% 
   save_kable(file = "./Tables/table1.tex")
 
 #' Regressions of Table 2

@@ -3,20 +3,25 @@
 \caption{\label{tab:tab1}Balanceamento de características individuais e por município por tipo de tratamento.}
 \centering
 \fontsize{10}{12}\selectfont
+\begin{threeparttable}
 \begin{tabular}[t]{llrrrrrr}
 \toprule
-Tratamento & Descrição & Gênero & Idade & População & Densidade pop. & Compliance & Observações\\
+Tratamento & Descrição & Gênero & Idade & Renda & População & Dens. pop. & Compliance\\
 \midrule
-Total &  & 0.63 & 36.26 & 43941.07 & 8.25 & 0.93 & 50498\\
-T0 & Sem Correio & 0.65 & 36.93 & 45815.27 & 8.17 & 0.94 & 2586\\
-T1 & Correio & 0.63 & 36.30 & 43377.19 & 8.56 & 0.94 & 7984\\
-T2 & Ameaça & 0.64 & 36.26 & 44542.59 & 7.96 & 0.93 & 7821\\
-T3 & Info & 0.63 & 36.26 & 43903.02 & 8.11 & 0.93 & 7998\\
+T0 & Sem Correio & 0.6458 & 48.0170 & 20928.4068 & 45815.2715 & 8.1711 & 0.9355\\
+T1 & Correio & 0.6338 & 47.9969 & 20878.9958 & 43377.1935 & 8.5625 & 0.9352\\
+T2 & Ameaça & 0.6367 & 47.9931 & 20901.1614 & 44542.5883 & 7.9605 & 0.9346\\
+T3 & Info & 0.6260 & 48.0300 & 20882.6636 & 43903.0189 & 8.1142 & 0.9347\\
+T4 & Info\&Ameaça & 0.6335 & 48.0051 & 20879.6138 & 43319.4736 & 8.3540 & 0.9352\\
 \addlinespace
-T4 & Info\&Ameaça & 0.63 & 35.86 & 43319.47 & 8.35 & 0.94 & 8101\\
-T5 & Moral & 0.63 & 36.23 & 44301.37 & 8.48 & 0.93 & 8084\\
-T6 & Moral\&Ameaça & 0.64 & 36.43 & 43610.20 & 8.05 & 0.93 & 7924\\
-Anova: & p-values & 0.17 & 0.33 & 0.76 & 0.58 & 0.86 & NA\\
+T5 & Moral & 0.6251 & 47.9982 & 20888.4584 & 44301.3718 & 8.4832 & 0.9343\\
+T6 & Moral\&Ameaça & 0.6422 & 47.9904 & 20876.3062 & 43610.1972 & 8.0468 & 0.9343\\
+Anova: & p-values & 0.1715 & 0.3993 & 0.9393 & 0.7577 & 0.5795 & 0.8614\\
 \bottomrule
 \end{tabular}
+\begin{tablenotes}
+\item \textit{Nota:} 
+\item Gênero igual a zero para mulher. Demais variáveis são denominadas em nível municipal, por exemplo Idade refere-se a idade média dos habitantes do município de residência do indivíduo.
+\end{tablenotes}
+\end{threeparttable}
 \end{table}
