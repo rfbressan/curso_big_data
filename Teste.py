@@ -1,10 +1,12 @@
 # DML use case with continuous treatment
-import econml
+# import econml
 import warnings
 warnings.filterwarnings('ignore')
 
 # Main imports
 from econml.dml import DMLCateEstimator, LinearDMLCateEstimator, SparseLinearDMLCateEstimator, ForestDMLCateEstimator
+from econml.causal_forest import CausalForest
+from econml.cate_interpreter import SingleTreeCateInterpreter
 
 import numpy as np
 from itertools import product
@@ -14,6 +16,7 @@ from sklearn.preprocessing import PolynomialFeatures
 import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.model_selection import train_test_split
+
 
 # Treatment effect function
 def exp_te(x):
@@ -115,3 +118,54 @@ score_te['DML poly Lasso'] = ((expected_te - te_pred2)**2).mean()
 score_te['DML Random Forest'] = ((expected_te - te_pred3)**2).mean()
 print('Best model based on UNFEASIBLE MSE of true TE residuals is:', min(score_te, key=lambda x: score_te.get(x)))
 
+## Causal Forest estimation
+def get_test_train_data(n, n_w, support_size, n_x, te_func, n_treatments):
+    # Outcome support
+    support_Y = np.random.choice(range(n_w), size=support_size, replace=False)
+    coefs_Y = np.random.uniform(0, 1, size=support_size)
+    epsilon_sample = lambda n: np.random.uniform(-1, 1, size=n)
+    # Treatment support 
+    support_T = support_Y
+    coefs_T = np.random.uniform(0, 1, size=(support_size, n_treatments))
+    eta_sample = lambda n: np.random.uniform(-1, 1, size=n) 
+    # Generate controls, covariates, treatments and outcomes
+    W = np.random.normal(0, 1, size=(n, n_w))
+    X = np.random.uniform(0, 1, size=(n, n_x))
+    # Heterogeneous treatment effects
+    TE = np.array([te_func(x_i, n_treatments) for x_i in X])
+    log_odds = np.dot(W[:, support_T], coefs_T)
+    T_sigmoid = np.exp(log_odds)
+    T_sigmoid = T_sigmoid/np.sum(T_sigmoid, axis=1, keepdims=True)
+    T = np.array([np.random.choice(n_treatments, p=p) for p in T_sigmoid])
+    TE = np.concatenate((np.zeros((n,1)), TE), axis=1)
+    Y = TE[np.arange(n), T] + np.dot(W[:, support_Y], coefs_Y) + epsilon_sample(n)
+    X_test = np.array(list(product(np.arange(0, 1, 0.01), repeat=n_x)))
+
+    return (Y, T, X, W), (X_test, np.array([te_func(x, n_treatments) for x in X_test]))
+
+import scipy.special
+def te_func(x, n_treatments):
+    return [np.exp(2*x[0]), 3*scipy.special.expit(100*(x[0] - .5)) - 1, -2*scipy.special.expit(100*(x[0] - .25))]
+
+np.random.seed(123)
+(Y, T, X, W), (X_test, te_test) = get_test_train_data(2000, 3, 3, 1, te_func, 4)
+
+cf=CausalForest(
+    n_trees=200,
+    min_leaf_size=15,
+    max_depth=8,
+    model_T=LogisticRegression(),
+    model_Y=Lasso(),
+    discrete_treatment=True,
+    random_state=123
+)
+cf.fit(Y, T, X)
+
+# Interpretacao causal por arvore de decisao
+# ERRO: so eh possivel para tratamentos de 1 dimensao
+interp = SingleTreeCateInterpreter(
+    include_model_uncertainty=False, 
+    max_depth=3, min_samples_leaf=10)
+interp.interpret(cf, X)
+fig, ax1 = plt.subplots(figsize=(25,6))
+interp.plot(feature_names=X.columns, fontsize=12, ax=ax1)

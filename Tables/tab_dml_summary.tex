@@ -1,0 +1,26 @@
+\begin{table}
+\centering
+\caption{Efeitos heterogêneos do tratamento estimados por Double Machine Learning.}
+\label{tab:dml-summary}
+\begin{tabular}{llrrrr}
+\toprule
+    X &     Estatística &  Correio &  Ameaça &   Info &  Moral \\
+\midrule
+ mean &  point\_estimate &    0,065 &   0,083 &  0,060 &  0,068 \\
+ mean &          stderr &    0,014 &   0,014 &  0,010 &  0,010 \\
+  min &  point\_estimate &    0,081 &   0,085 &  0,114 &  0,095 \\
+  min &          stderr &    0,017 &   0,020 &  0,021 &  0,033 \\
+  25\% &  point\_estimate &    0,070 &   0,072 &  0,065 &  0,063 \\
+  25\% &          stderr &    0,013 &   0,013 &  0,014 &  0,010 \\
+  50\% &  point\_estimate &    0,065 &   0,081 &  0,059 &  0,066 \\
+  50\% &          stderr &    0,016 &   0,014 &  0,011 &  0,011 \\
+  75\% &  point\_estimate &    0,082 &   0,115 &  0,075 &  0,083 \\
+  75\% &          stderr &    0,013 &   0,023 &  0,014 &  0,011 \\
+  max &  point\_estimate &    0,095 &   0,115 &  0,090 &  0,101 \\
+  max &          stderr &    0,019 &   0,018 &  0,016 &  0,018 \\
+\bottomrule
+\multicolumn{6}{l}{\emph{Nota: os estágios de previsão foram floresta aleatória para E[Y|X]
+e regressão logística para E[T|X]. O modelo final para o efeito 
+condicional do tratamento, $\theta(X)$, é uma floresta aleatória.}}\\
+\end{tabular}
+\end{table}
