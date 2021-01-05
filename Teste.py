@@ -9,6 +9,7 @@ from econml.causal_forest import CausalForest
 from econml.cate_interpreter import SingleTreeCateInterpreter
 
 import numpy as np
+import pandas as pd 
 from itertools import product
 from sklearn.linear_model import Lasso, LassoCV, LogisticRegression, LogisticRegressionCV, LinearRegression, MultiTaskElasticNet, MultiTaskElasticNetCV
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
@@ -169,3 +170,32 @@ interp = SingleTreeCateInterpreter(
 interp.interpret(cf, X)
 fig, ax1 = plt.subplots(figsize=(25,6))
 interp.plot(feature_names=X.columns, fontsize=12, ax=ax1)
+
+# Teste para colocar asteriscos nas estimativas
+df=pd.DataFrame(
+    {"estimativa": [1.2345, 2.37373, 5.92389237],
+     "std_err": [0.25235, 0.7623634, 2.3838],
+     "pvalor": [0.0065, 0.0492, 0.1234]})
+df
+
+def stars(x, levels=[0.1, 0.05, 0.01]):
+    assert (len(levels)==3), "Comprimento de levels deve ser 3."
+
+    if x>levels[0]:
+        return ''
+    elif x>levels[1]:
+        return '*'
+    elif x>levels[2]:
+        return '**'
+    else:
+        return '***'
+
+def format_float(x, digits):
+    return '{:.{dig}f}'.format(x, dig=digits)
+
+df['stars']=df['pvalor'].apply(stars)
+df['estimativa']=df['estimativa'].apply(format_float, digits=4)
+df['estimativa']=df['estimativa'].str.cat(df['stars'])
+df['std_err']=df['std_err'].apply(format_float, digits=4)
+df[['estimativa', 'std_err']].stack()
+df

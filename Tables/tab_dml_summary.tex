@@ -1,26 +1,28 @@
-\begin{table}
+\begin{table}[ht]
 \centering
 \caption{Efeitos heterogêneos do tratamento estimados por Double Machine Learning.}
 \label{tab:dml-summary}
-\begin{tabular}{llrrrr}
+\begin{threeparttable}
+\begin{tabular}{lllll}
 \toprule
-    X &     Estatística &  Correio &  Ameaça &   Info &  Moral \\
+    X &    Correio &     Ameaça &       Info &      Moral \\
 \midrule
- mean &  point\_estimate &    0,065 &   0,083 &  0,060 &  0,068 \\
- mean &          stderr &    0,014 &   0,014 &  0,010 &  0,010 \\
-  min &  point\_estimate &    0,081 &   0,085 &  0,114 &  0,095 \\
-  min &          stderr &    0,017 &   0,020 &  0,021 &  0,033 \\
-  25\% &  point\_estimate &    0,070 &   0,072 &  0,065 &  0,063 \\
-  25\% &          stderr &    0,013 &   0,013 &  0,014 &  0,010 \\
-  50\% &  point\_estimate &    0,065 &   0,081 &  0,059 &  0,066 \\
-  50\% &          stderr &    0,016 &   0,014 &  0,011 &  0,011 \\
-  75\% &  point\_estimate &    0,082 &   0,115 &  0,075 &  0,083 \\
-  75\% &          stderr &    0,013 &   0,023 &  0,014 &  0,011 \\
-  max &  point\_estimate &    0,095 &   0,115 &  0,090 &  0,101 \\
-  max &          stderr &    0,019 &   0,018 &  0,016 &  0,018 \\
+ mean &  0.0680*** &  0.0810*** &  0.0620*** &  0.0690*** \\
+  &   (0.0110) &   (0.0110) &   (0.0090) &   (0.0110) \\
+  min &  0.0780*** &  0.0790*** &  0.1150*** &  0.0790*** \\
+   &   (0.0140) &   (0.0210) &   (0.0320) &   (0.0190) \\
+  25\% &  0.0700*** &  0.0690*** &  0.0590*** &  0.0650*** \\
+   &   (0.0120) &   (0.0100) &   (0.0080) &   (0.0140) \\
+  50\% &  0.0670*** &  0.0800*** &  0.0570*** &  0.0650*** \\
+   &   (0.0090) &   (0.0130) &   (0.0110) &   (0.0110) \\
+  75\% &  0.0840*** &  0.1120*** &  0.0780*** &  0.0770*** \\
+   &   (0.0110) &   (0.0210) &   (0.0130) &   (0.0130) \\
+  max &  0.1010*** &  0.1090*** &  0.0840*** &  0.0820*** \\
+   &   (0.0190) &   (0.0240) &   (0.0150) &   (0.0180) \\
 \bottomrule
-\multicolumn{6}{l}{\emph{Nota: os estágios de previsão foram floresta aleatória para E[Y|X]
-e regressão logística para E[T|X]. O modelo final para o efeito 
-condicional do tratamento, $\theta(X)$, é uma floresta aleatória.}}\\
 \end{tabular}
+\begin{tablenotes}
+\item \emph{Nota: Os estágios de previsão foram floresta aleatória para $E[Y|\bfx]$ e regressão logística para $E[T|\bfx]$. O modelo final para o efeito condicional do tratamento, $\theta(\bfx)$, é uma floresta aleatória.}\\
+\end{tablenotes}
+\end{threeparttable}
 \end{table}

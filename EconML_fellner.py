@@ -27,14 +27,42 @@ from econml.causal_forest import CausalForest
 # Graficos
 import matplotlib.pyplot as plt
 
+# Funcoes auxiliares
+def stars(x, levels=[0.1, 0.05, 0.01]):
+    assert (len(levels)==3), "Comprimento de levels deve ser 3."
+    
+    if x>levels[0]:
+        return ''
+    elif x>levels[1]:
+        return '*'
+    elif x>levels[2]:
+        return '**'
+    else:
+        return '***'
+
+def format_float(x, digits):
+    return '{:.{dig}f}'.format(x, dig=digits)
+
+def surr_parenthesis(x, digits):
+    return '('+'{:.{dig}f}'.format(x, dig=digits)+')'
+
+
 # Carregando os dados
 data = pd.read_stata("data_final.dta").sort_values("treatment")
-
+X_cols = ["gender", "pop_density2005", 
+    "compliance", "compliance_t", "vo_r", "vo_cr", "vo_cl", "vo_l", 
+    "inc_aver", "edu_aver", "edu_lo", "edu_mi", "edu_hi", 
+    "age_aver", "age0_30", "age30_60", "nat_A", "nat_EU", "nat_nonEU"]
 ################################################################
 # Ignorando o atrito e estimando os efeitos apenas para 
 # delivered == 1
 ################################################################
 deliv = data[data["delivered"]!=0].fillna(0)
+# Para avaliacao de efeitos heterogeneos
+X_eval = (deliv[X_cols]
+    .describe()
+    .loc[["mean", "min", "25%", "50%", "75%", "max"]]
+)
 # Tratamentos
 t1_deliv = deliv[deliv["treatment"].isin([0,1])]
 t2_deliv = deliv[deliv["treatment"].isin([0,2])]
@@ -44,43 +72,24 @@ t5_deliv = deliv[deliv["treatment"].isin([0,5])]
 # Variaveis de interesse
 Y1 = t1_deliv["resp_A"].values
 T1 = t1_deliv["delivered"].values
-X_cols = ["gender", "pop_density2005", 
-    "compliance", "compliance_t", "vo_r", "vo_cr", "vo_cl", "vo_l", 
-    "inc_aver", "edu_aver", "edu_lo", "edu_mi", "edu_hi", 
-    "age_aver", "age0_30", "age30_60", "nat_A", "nat_EU", "nat_nonEU"]
 X1 = t1_deliv[X_cols].values
 X1_treat=X1[T1 == 1]
-X1_eval = (t1_deliv[X_cols]
-    .describe()
-    .loc[["mean", "min", "25%", "50%", "75%", "max"]]
-)
 
 Y2 = t2_deliv["resp_A"].values
 T2 = t2_deliv["delivered"].values
 X2 = t2_deliv[X_cols].values
 X2_treat=X2[T2 == 1]
-X2_eval = (t2_deliv[X_cols]
-    .describe()
-    .loc[["mean", "min", "25%", "50%", "75%", "max"]]
-)
 
 Y3 = t3_deliv["resp_A"].values
 T3 = t3_deliv["delivered"].values
 X3 = t3_deliv[X_cols].values
 X3_treat=X3[T3 == 1]
-X3_eval = (t3_deliv[X_cols]
-    .describe()
-    .loc[["mean", "min", "25%", "50%", "75%", "max"]]
-)
 
 Y5 = t5_deliv["resp_A"].values
 T5 = t5_deliv["delivered"].values
 X5 = t5_deliv[X_cols].values
 X5_treat=X5[T5 == 1]
-X5_eval = (t5_deliv[X_cols]
-    .describe()
-    .loc[["mean", "min", "25%", "50%", "75%", "max"]]
-)
+
 # ForestDML() = CausalForest()??
 # ForestDML eh muito mais rapido que CausalForest com resultados 
 # semelhantes para a interpretacao via arvore
@@ -101,26 +110,38 @@ dml=ForestDML(
 dml.fit(Y1, T1, X1, inference='auto')
 dml1_eff=dml.effect(X1, T0=0, T1=1)
 dml1_eff_treat=dml.effect(X1_treat, T0=0, T1=1)
-print(f"ATE T1 por DML: {np.mean(dml1_eff)}")
-dml1_inf=dml.effect_inference(X1_eval.values)
-dml1_summary=dml1_inf.summary_frame(alpha=0.05)[["point_estimate", "stderr"]]
-dml1_summary.index=X1_eval.index
-dml1_summary=dml1_summary.stack()
+print(f"ATE T1 por DML: {np.mean(dml1_eff)}\nATT T1 por DML: {np.mean(dml1_eff_treat)}")
+dml1_inf=dml.effect_inference(X_eval.values)
+dml1_summary=dml1_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
+dml1_summary.index=X_eval.index
+dml1_summary["star"]=dml1_summary["pvalue"].apply(stars)
+dml1_summary["point_estimate"]=dml1_summary["point_estimate"].apply(format_float, digits=4)
+dml1_summary["point_estimate"]=dml1_summary["point_estimate"].str.cat(dml1_summary["star"])
+dml1_summary["stderr"]=dml1_summary["stderr"].apply(surr_parenthesis, digits=4)
+dml1_summary=dml1_summary[["point_estimate", "stderr"]].stack()
 dml1_summary.name="Correio"
 
 # DML para T2
 dml.fit(Y2, T2, X2, inference='auto')
 dml2_eff=dml.effect(X2, T0=0, T1=1)
 dml2_eff_treat=dml.effect(X2_treat, T0=0, T1=1)
-print(f"ATE T2 por DML: {np.mean(dml2_eff)}")
-dml2_inf=dml.effect_inference(X2_eval.values)
-dml2_summary=dml2_inf.summary_frame(alpha=0.05)[["point_estimate", "stderr"]]
-dml2_summary.index=X2_eval.index
-dml2_summary=dml2_summary.stack()
+print(f"ATE T2 por DML: {np.mean(dml2_eff)}\nATT T2 por DML: {np.mean(dml2_eff_treat)}")
+dml2_inf=dml.effect_inference(X_eval.values)
+dml2_summary=dml2_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
+dml2_summary.index=X_eval.index
+dml2_summary["star"]=dml2_summary["pvalue"].apply(stars)
+dml2_summary["point_estimate"]=dml2_summary["point_estimate"].apply(format_float, digits=4)
+dml2_summary["point_estimate"]=dml2_summary["point_estimate"].str.cat(dml2_summary["star"])
+dml2_summary["stderr"]=dml2_summary["stderr"].apply(surr_parenthesis, digits=4)
+dml2_summary=dml2_summary[["point_estimate", "stderr"]].stack()
 dml2_summary.name="Ameaça"
 
 # Interpretacao por arvore de decisao para T2
-interp.interpret(dml, X)
+interp = SingleTreeCateInterpreter(
+    include_model_uncertainty=False, 
+    max_depth=3, 
+    min_samples_leaf=10)
+interp.interpret(dml, X2)
 fig, ax1 = plt.subplots(figsize=(25,6))
 interp.plot(feature_names=X_cols, fontsize=12, ax=ax1)
 fig.savefig("Figs/fig_tree_dml.png")
@@ -129,22 +150,30 @@ fig.savefig("Figs/fig_tree_dml.png")
 dml.fit(Y3, T3, X3, inference='auto')
 dml3_eff=dml.effect(X3, T0=0, T1=1)
 dml3_eff_treat=dml.effect(X3_treat, T0=0, T1=1)
-print(f"ATE T3 por DML: {np.mean(dml3_eff)}")
-dml3_inf=dml.effect_inference(X3_eval.values)
-dml3_summary=dml3_inf.summary_frame(alpha=0.05)[["point_estimate", "stderr"]]
-dml3_summary.index=X3_eval.index
-dml3_summary=dml3_summary.stack()
+print(f"ATE T3 por DML: {np.mean(dml3_eff)}\nATT T3 por DML: {np.mean(dml3_eff_treat)}")
+dml3_inf=dml.effect_inference(X_eval.values)
+dml3_summary=dml3_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
+dml3_summary.index=X_eval.index
+dml3_summary["star"]=dml3_summary["pvalue"].apply(stars)
+dml3_summary["point_estimate"]=dml3_summary["point_estimate"].apply(format_float, digits=4)
+dml3_summary["point_estimate"]=dml3_summary["point_estimate"].str.cat(dml3_summary["star"])
+dml3_summary["stderr"]=dml3_summary["stderr"].apply(surr_parenthesis, digits=4)
+dml3_summary=dml3_summary[["point_estimate", "stderr"]].stack()
 dml3_summary.name="Info"
 
-# DML para T5Y5 = t5_deliv["resp_A"].values
+# DML para T5
 dml.fit(Y5, T5, X5, inference='auto')
 dml5_eff=dml.effect(X5, T0=0, T1=1)
 dml5_eff_treat=dml.effect(X5_treat, T0=0, T1=1)
-print(f"ATE T5 por DML: {np.mean(dml5_eff)}")
-dml5_inf=dml.effect_inference(X5_eval.values)
-dml5_summary=dml5_inf.summary_frame(alpha=0.05)[["point_estimate", "stderr"]]
-dml5_summary.index=X5_eval.index
-dml5_summary=dml5_summary.stack()
+print(f"ATE T5 por DML: {np.mean(dml5_eff)}\nATT T5 por DML: {np.mean(dml5_eff_treat)}")
+dml5_inf=dml.effect_inference(X_eval.values)
+dml5_summary=dml5_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
+dml5_summary.index=X_eval.index
+dml5_summary["star"]=dml5_summary["pvalue"].apply(stars)
+dml5_summary["point_estimate"]=dml5_summary["point_estimate"].apply(format_float, digits=4)
+dml5_summary["point_estimate"]=dml5_summary["point_estimate"].str.cat(dml5_summary["star"])
+dml5_summary["stderr"]=dml5_summary["stderr"].apply(surr_parenthesis, digits=4)
+dml5_summary=dml5_summary[["point_estimate", "stderr"]].stack()
 dml5_summary.name="Moral"
 
 # ATE
@@ -153,14 +182,35 @@ dml_ate=[np.mean(x) for x in [dml1_eff, dml2_eff, dml3_eff, dml5_eff]]
 dml_att=[np.mean(x) for x in 
     [dml1_eff_treat, dml2_eff_treat, dml3_eff_treat, dml5_eff_treat]]
 
+treatments_list=["Correio", "Ameaça", "Info", "Moral"]
+treatments_df=pd.DataFrame({"ATE": dml_ate, "ATT": dml_att}, index=treatments_list)
+treatments_df.to_latex(
+    buf="Tables/tab_dml_effects.tex",
+    decimal=",",
+    caption="ATE e ATT estimados por DML para diferentes tratamentos.",
+    label="tab:dml-effects"
+)
+
 # ATE mais alto que ATT? Como explicar isso sem recorrer a spillover?
+# Non-compliance alterou a aleatorizacao do experimento, portanto
+# houve auto-selecao nos dados e ATT pode diferir de ATNT
+
+# Quantis das variaveis utilizadas para aferir heterogeneidade
+X_eval.transpose().to_latex(
+    buf="Tables/tab_het_vars.tex",
+    decimal=",",
+    caption="Variáveis utilizadas para identificar heterogeneidade nos efeitos.",
+    label="tab:het-vars"
+)
+
 # Sumario com os resultados para os 4 tratamentos
 dml_summary=(
     pd.concat(
         [dml1_summary, dml2_summary, dml3_summary, dml5_summary],
         axis=1)
     .reset_index()
-    .rename(columns={"level_0": "X", "level_1": "Estatística"})
+    .rename(columns={"level_0": "X"})
+    .drop(columns="level_1")
 )
 
 dml_summary.to_latex(
@@ -170,25 +220,50 @@ dml_summary.to_latex(
     label="tab:dml-summary",
     index=False
 )
-# Nota: os estágios de previsão foram floresta aleatória para E[Y|X]
-# e regressão logística para E[T|X]. O modelo final para o efeito 
-# condicional do tratamento, $\theta(X)$, é uma floresta aleatória.
+# Nota: os estágios de previsão foram floresta aleatória para $E[Y|\bfx]$
+# e regressão logística para $E[T|\bfx]$. O modelo final para o efeito 
+# condicional do tratamento, $\theta(\bfx)$, é uma floresta aleatória.
 
 ################################################################
 # Metodos com variaveis Instrumentais
 ################################################################
-# Apenas tratamento T1
-t1_data = data[data["treatment"].isin([0,1])]
-# Controles nao recebem cartas
-t1_data["delivered"] = (t1_data["delivered"]
-    .fillna(0)
-    .astype("int8"))
+
+################################################################
+# Considerando o atrito e estimando os efeitos 
+################################################################
+iv=data.copy()
+iv["delivered"] = iv["delivered"].fillna(0)
+# Para avaliacao de heterogeneidade
+X_eval = (iv[X_cols]
+    .describe()
+    .loc[["mean", "min", "25%", "50%", "75%", "max"]]
+)
+# Tratamentos
+t1_iv = iv[iv["treatment"].isin([0,1])]
+t2_iv = iv[iv["treatment"].isin([0,2])]
+t3_iv = iv[iv["treatment"].isin([0,3])]
+t5_iv = iv[iv["treatment"].isin([0,5])]
 
 # Definindo as variaveis
-Z = t1_data["treatment"]
-T = t1_data["delivered"]
-Y = t1_data["resp_A"]
-X = t1_data[X_cols]
+Z1 = t1_iv["treatment"]
+T1 = t1_iv["delivered"]
+Y1 = t1_iv["resp_A"]
+X1 = t1_iv[X_cols]
+
+Z2 = t2_iv["treatment"]
+T2 = t2_iv["delivered"]
+Y2 = t2_iv["resp_A"]
+X2 = t2_iv[X_cols]
+
+Z3 = t3_iv["treatment"]
+T3 = t3_iv["delivered"]
+Y3 = t3_iv["resp_A"]
+X3 = t3_iv[X_cols]
+
+Z5 = t5_iv["treatment"]
+T5 = t5_iv["delivered"]
+Y5 = t5_iv["resp_A"]
+X5 = t5_iv[X_cols]
 
 # Modelos para E[Y|X] e E[T|Z,X]
 lgb_YX_par = {
@@ -221,63 +296,126 @@ modelZX = lgb.LGBMClassifier(**lgb_TXZ_par)
 pre_theta = lgb.LGBMRegressor(**lgb_theta_par)
 
 ## Modelo 2-stages Least Squares
-T_sm = sm.add_constant(T)
-model_2sls = IV2SLS(Y, exog=T_sm["const"], endog=T, instruments=Z)
-iv_fit = model_2sls.fit()
-iv_fit.summary
-
-## Modelo DMLATEIV
-model_dml = DMLATEIV(
-    model_Y_W=modelYX,
-    model_T_W=modelTXZ,
-    model_Z_W=modelZX,
-    discrete_treatment=True,
-    discrete_instrument=True,
-    n_splits=5
-)
-model_dml.fit(Y, T, Z, W=None, inference="bootstrap")
-model_dml.const_marginal_effect_interval(alpha=0.05)
+# Variaveis com amostra completa
+Z = iv[["mailing", "threat", "info", "appeal", "i_tinf", "i_tapp"]]
+T = Z.multiply(iv["delivered"], axis=0)
+Y = iv["resp_A"]
+model_2sls = IV2SLS(Y, exog=np.ones(len(Y)), endog=T, instruments=Z)
+iv2sls_fit = model_2sls.fit(debiased=True)
+with open("Tables/tab_iv2sls.tex", "w") as f:
+    f.write(iv2sls_fit.summary.as_latex())
 
 ## Modelo DRIV
-# Treina o modelo Linear DRIV. O proprio Theta(X) eh uma
-# Projecao linear em X!
-model_ldriv = LinearIntentToTreatDRIV(
-    model_Y_X=modelYX,
-    model_T_XZ=modelTXZ,
-    flexible_model_effect=pre_theta,
-    n_splits=5,
-    featurizer=None #PolynomialFeatures(degree=1, include_bias=False)
-)
-model_ldriv.fit(Y, T, Z=Z, X=X, inference="statsmodels")
-# Resultado do ajuste
-model_ldriv.summary(feat_name=X.columns)
 
 # Treina o modelo DRIV mais flexivel. Theta(X) pode ser um modelo
 # flexivel (nao parametrico, ie. floresta aleatoria) de X
 # ATENCAO: leva bastante tempo para rodar
-model_driv = IntentToTreatDRIV(
+driv = IntentToTreatDRIV(
     model_Y_X=modelYX,
     model_T_XZ=modelTXZ,
     flexible_model_effect=pre_theta,
-    n_splits=5,
+    n_splits=3,
     featurizer=None #PolynomialFeatures(degree=1, include_bias=False)
 )
-model_driv.fit(Y, T, Z=Z, X=X, inference="bootstrap")
-# Resultado do ajuste. X_mean deve ser um dataframe
-X_eval = X.describe().loc[["mean", "min", "25%", "50%", "75%", "max"]]
-driv_effect = model_driv.effect_interval(X=X_eval, alpha=0.05)
-driv_dict = {"LB": driv_effect[0], "UB": driv_effect[1]}
-driv_df=pd.DataFrame(driv_dict, index=X_eval.index)
+# DRIV para T1
+driv.fit(Y1, T1, Z=Z1, X=X1, inference="bootstrap")
+driv1_eff=driv.effect(X1, T0=0, T1=1)
+print(f"LATE T1 por DRIV: {np.mean(driv1_eff)}")
+driv1_inf=driv.effect_inference(X_eval)
+driv1_summary=driv1_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
+driv1_summary.index=X_eval.index
+driv1_summary["star"]=driv1_summary["pvalue"].apply(stars)
+driv1_summary["point_estimate"]=driv1_summary["point_estimate"].apply(format_float, digits=4)
+driv1_summary["point_estimate"]=driv1_summary["point_estimate"].str.cat(driv1_summary["star"])
+driv1_summary["stderr"]=driv1_summary["stderr"].apply(surr_parenthesis, digits=4)
+driv1_summary=driv1_summary[["point_estimate", "stderr"]].stack()
+driv1_summary.name="Correio"
 
+# DRIV para T2
+driv.fit(Y2, T2, Z=Z2, X=X2, inference="bootstrap")
+driv2_eff=driv.effect(X2, T0=0, T1=1)
+print(f"LATE T2 por DRIV: {np.mean(driv2_eff)}")
+driv2_inf=driv.effect_inference(X_eval)
+driv2_summary=driv2_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
+driv2_summary.index=X_eval.index
+driv2_summary["star"]=driv2_summary["pvalue"].apply(stars)
+driv2_summary["point_estimate"]=driv2_summary["point_estimate"].apply(format_float, digits=4)
+driv2_summary["point_estimate"]=driv2_summary["point_estimate"].str.cat(driv2_summary["star"])
+driv2_summary["stderr"]=driv2_summary["stderr"].apply(surr_parenthesis, digits=4)
+driv2_summary=driv2_summary[["point_estimate", "stderr"]].stack()
+driv2_summary.name="Ameaça"
 # Interpretacao causal por arvore de decisao
 interp = SingleTreeCateInterpreter(
     include_model_uncertainty=False, 
-    max_depth=3, min_samples_leaf=10)
-interp.interpret(model_driv, X)
+    max_depth=3, 
+    min_samples_leaf=10
+)
+interp.interpret(driv, X2)
 fig, ax1 = plt.subplots(figsize=(25,6))
-interp.plot(feature_names=X.columns, fontsize=12, ax=ax1)
+interp.plot(feature_names=X2.columns, fontsize=12, ax=ax1)
 fig.savefig("Figs/fig_tree_driv.png")
 
+# DRIV para T3
+driv.fit(Y3, T3, Z=Z3, X=X3, inference="bootstrap")
+driv3_eff=driv.effect(X3, T0=0, T1=1)
+print(f"LATE T3 por DRIV: {np.mean(driv3_eff)}")
+driv3_inf=driv.effect_inference(X_eval)
+driv3_summary=driv3_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
+driv3_summary.index=X_eval.index
+driv3_summary["star"]=driv3_summary["pvalue"].apply(stars)
+driv3_summary["point_estimate"]=driv3_summary["point_estimate"].apply(format_float, digits=4)
+driv3_summary["point_estimate"]=driv3_summary["point_estimate"].str.cat(driv3_summary["star"])
+driv3_summary["stderr"]=driv3_summary["stderr"].apply(surr_parenthesis, digits=4)
+driv3_summary=driv3_summary[["point_estimate", "stderr"]].stack()
+driv3_summary.name="Info"
+
+# DRIV para T5
+driv.fit(Y5, T5, Z=Z5, X=X5, inference="bootstrap")
+driv5_eff=driv.effect(X5, T0=0, T1=1)
+print(f"LATE T5 por DRIV: {np.mean(driv5_eff)}")
+driv5_inf=driv.effect_inference(X_eval)
+driv5_summary=driv5_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
+driv5_summary.index=X_eval.index
+driv5_summary["star"]=driv5_summary["pvalue"].apply(stars)
+driv5_summary["point_estimate"]=driv5_summary["point_estimate"].apply(format_float, digits=4)
+driv5_summary["point_estimate"]=driv5_summary["point_estimate"].str.cat(driv5_summary["star"])
+driv5_summary["stderr"]=driv5_summary["stderr"].apply(surr_parenthesis, digits=4)
+driv5_summary=driv5_summary[["point_estimate", "stderr"]].stack()
+driv5_summary.name="Moral"
+
+# LATE
+driv_late=[np.mean(x) for x in 
+    [driv1_eff, driv2_eff, driv3_eff, driv5_eff]]
+treatments_list=["Correio", "Ameaça", "Info", "Moral"]
+treatments_df=pd.DataFrame({"LATE": driv_late}, index=treatments_list)
+treatments_df.to_latex(
+    buf="Tables/tab_driv_late.tex",
+    decimal=",",
+    caption="LATE estimado por \textit{Doubly Robust} IV para diferentes tratamentos.",
+    label="tab:driv-late"
+)
+
+# Sumario com os resultados para os 4 tratamentos
+driv_summary=(
+    pd.concat(
+        [driv1_summary, driv2_summary, driv3_summary, driv5_summary],
+        axis=1)
+    .reset_index()
+    .rename(columns={"level_0": "X"})
+    .drop(columns="level_1")
+)
+
+driv_summary.to_latex(
+    buf="Tables/tab_driv_summary.tex",
+    decimal=",",
+    caption="Efeitos heterogêneos do tratamento estimados por Doubly Robust IV.",
+    label="tab:dml-summary",
+    index=False
+)
+# Nota: os estágios de previsão foram gradient boosted tree (regressão) para $E[Y|\bfx]$
+# e gbm (classificação) $E[T|\bfx]$. O modelo final para o efeito 
+# condicional do tratamento, $\theta(\bfx)$, também foi uma gbm-regressão, porém mais rasa,
+# com apenas 3 níveis de profundidade.
 
 # Salva objetos 
 with open("modelos.pkl", "wb") as f:
@@ -326,4 +464,16 @@ with open("modelos.pkl", "wb") as f:
 # fig, ax1 = plt.subplots(figsize=(25,6))
 # interp.plot(feature_names=X_cols, fontsize=12, ax=ax1)
 # fig.savefig("Figs/fig_tree_cf.png")
+
+# ## Modelo DMLATEIV
+# model_dml = DMLATEIV(
+#     model_Y_W=modelYX,
+#     model_T_W=modelTXZ,
+#     model_Z_W=modelZX,
+#     discrete_treatment=True,
+#     discrete_instrument=True,
+#     n_splits=5
+# )
+# model_dml.fit(Y, T, Z, W=None, inference="bootstrap")
+# model_dml.const_marginal_effect_interval(alpha=0.05)
 
