@@ -1,0 +1,315 @@
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{#' Analise e replicacao de alguns resultados em Fellner et all (2013)}
+\CommentTok{#' Autor: Rafael Felipe Bressan}
+\CommentTok{#' Arquivo: script_R.R}
+\CommentTok{#' Script R para o trabalho monografico: Inferência Causal com Machine Learning}
+\CommentTok{#' uma aplicacao para evasao fiscal}
+\CommentTok{#' Pós-Graduacao Lato Sensu em Ciencia de Dados e Big Data PUC-MG}
+\CommentTok{#' Ano: 2021}
+\CommentTok{#' }
+\CommentTok{#' Carrega as bibliotecas}
+\KeywordTok{library}\NormalTok{(sandwich)}
+\KeywordTok{library}\NormalTok{(fixest)}
+\KeywordTok{library}\NormalTok{(tidyverse)}
+\KeywordTok{library}\NormalTok{(glue)}
+\KeywordTok{library}\NormalTok{(skimr)}
+\KeywordTok{library}\NormalTok{(knitr)}
+\KeywordTok{library}\NormalTok{(kableExtra)}
+\KeywordTok{library}\NormalTok{(stargazer)}
+\KeywordTok{library}\NormalTok{(texreg)}
+
+\CommentTok{#' Tabela 1 com a descricao das variaveis}
+\NormalTok{desc_tbl <-}\StringTok{ }\KeywordTok{read_csv}\NormalTok{(}\StringTok{"descricao.csv"}\NormalTok{)}
+
+\KeywordTok{kbl}\NormalTok{(desc_tbl, }\DataTypeTok{booktabs =} \OtherTok{TRUE}\NormalTok{, }\DataTypeTok{longtable =} \OtherTok{TRUE}\NormalTok{, }\DataTypeTok{format =} \StringTok{"latex"}\NormalTok{,}
+    \DataTypeTok{col.names =} \KeywordTok{c}\NormalTok{(}\StringTok{"Variável"}\NormalTok{, }\StringTok{"Descrição"}\NormalTok{),}
+    \DataTypeTok{caption =} \StringTok{"Variáveis e descrições"}\NormalTok{,}
+    \DataTypeTok{label =} \StringTok{"descricao"}\NormalTok{) }\OperatorTok{%>%}
+\StringTok{  }\KeywordTok{kable_styling}\NormalTok{(}\DataTypeTok{full_width =} \OtherTok{FALSE}\NormalTok{, }
+                \DataTypeTok{latex_options =} \KeywordTok{c}\NormalTok{(}\StringTok{"repeat_header"}\NormalTok{),}
+                \DataTypeTok{repeat_header_text =} \StringTok{"(continuação)"}\NormalTok{) }\OperatorTok{%>%}
+\StringTok{  }\KeywordTok{column_spec}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DataTypeTok{width =} \StringTok{"30em"}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{save_kable}\NormalTok{(}\DataTypeTok{file =} \StringTok{"./Tables/table_descricao.tex"}\NormalTok{)}
+
+\CommentTok{#' Carregando os dados}
+\NormalTok{data <-}\StringTok{ }\NormalTok{haven}\OperatorTok{::}\KeywordTok{read_dta}\NormalTok{(}\StringTok{"data_final.dta"}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{as.data.frame}\NormalTok{()}
+
+\CommentTok{# Descrevendo o desenho do experimento --------------------------------}
+
+\CommentTok{#' Tabela contando o numero de recipientes de cada tratamento}
+\CommentTok{#'}
+\NormalTok{data}\OperatorTok{$}\NormalTok{treatment <-}\StringTok{ }\KeywordTok{factor}\NormalTok{(data}\OperatorTok{$}\NormalTok{treatment)}
+\NormalTok{t_sizes <-}\StringTok{ }\KeywordTok{as.vector}\NormalTok{(}\KeywordTok{table}\NormalTok{(data}\OperatorTok{$}\NormalTok{treatment))}
+
+\NormalTok{buckets <-}\StringTok{ }\KeywordTok{data.frame}\NormalTok{(}\DataTypeTok{treatment =} \KeywordTok{sort}\NormalTok{(}\KeywordTok{unique}\NormalTok{(data}\OperatorTok{$}\NormalTok{treatment)),}
+                      \DataTypeTok{Buckets =} \KeywordTok{c}\NormalTok{(}\StringTok{"T0"}\NormalTok{, }\StringTok{"T1"}\NormalTok{, }\StringTok{"T2"}\NormalTok{, }\StringTok{"T3"}\NormalTok{, }\StringTok{"T4"}\NormalTok{, }\StringTok{"T5"}\NormalTok{, }\StringTok{"T6"}\NormalTok{),}
+                      \DataTypeTok{Description =} \KeywordTok{c}\NormalTok{(}\StringTok{"Sem Correio"}\NormalTok{, }\StringTok{"Correio"}\NormalTok{, }\StringTok{"Ameaça"}\NormalTok{, }\StringTok{"Info"}\NormalTok{,}
+                                      \StringTok{"Info&Ameaça"}\NormalTok{, }\StringTok{"Moral"}\NormalTok{, }\StringTok{"Moral&Ameaça"}\NormalTok{),}
+                      \DataTypeTok{Size =}\NormalTok{ t_sizes) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{Prop =}\NormalTok{ Size }\OperatorTok{/}\StringTok{ }\KeywordTok{nrow}\NormalTok{(data))}
+
+\CommentTok{#' Tabela 2 recipientes de cada tratamento}
+\KeywordTok{kbl}\NormalTok{(buckets[}\OperatorTok{-}\DecValTok{1}\NormalTok{], }\DataTypeTok{format =} \StringTok{"latex"}\NormalTok{, }\DataTypeTok{booktabs =} \OtherTok{TRUE}\NormalTok{, }\DataTypeTok{label =} \StringTok{"descritivas1"}\NormalTok{,}
+    \DataTypeTok{col.names =} \KeywordTok{c}\NormalTok{(}\StringTok{"Tratamento"}\NormalTok{, }\StringTok{"Descrição"}\NormalTok{, }\StringTok{"Observações"}\NormalTok{, }\StringTok{"Proporção"}\NormalTok{),}
+    \DataTypeTok{caption =} \StringTok{"Distribuição dos tratamentos na amostra."}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kable_styling}\NormalTok{(}\DataTypeTok{latex_options =} \KeywordTok{c}\NormalTok{(}\StringTok{"HOLD_position"}\NormalTok{)) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kable_classic}\NormalTok{(}\DataTypeTok{full_width =} \OtherTok{FALSE}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{save_kable}\NormalTok{(}\StringTok{"./Tables/table_descritivas1.tex"}\NormalTok{)}
+
+\CommentTok{#' Junta de volta as inforamacoes de bucket e descricao para os dados}
+\NormalTok{data <-}\StringTok{ }\NormalTok{data }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{left_join}\NormalTok{(buckets[, }\KeywordTok{c}\NormalTok{(}\StringTok{"treatment"}\NormalTok{, }\StringTok{"Buckets"}\NormalTok{, }\StringTok{"Description"}\NormalTok{)], }\DataTypeTok{by =} \StringTok{"treatment"}\NormalTok{)}
+\CommentTok{#' Estatisticas descritivas da base}
+\CommentTok{#' Variaveis com valor NA}
+\NormalTok{skim_df <-}\StringTok{ }\NormalTok{data }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{skim_without_charts}\NormalTok{()}
+
+\NormalTok{na_df <-}\StringTok{ }\NormalTok{skim_df }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{filter}\NormalTok{(n_missing }\OperatorTok{>}\StringTok{ }\DecValTok{0}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{select}\NormalTok{(skim_variable, n_missing, complete_rate)}
+
+\CommentTok{#' Tabela 3 dados faltantes}
+\KeywordTok{kbl}\NormalTok{(na_df, }\DataTypeTok{digits =} \DecValTok{2}\NormalTok{, }\DataTypeTok{format =} \StringTok{"latex"}\NormalTok{, }\DataTypeTok{booktabs =} \OtherTok{TRUE}\NormalTok{, }\DataTypeTok{label =} \StringTok{"missings"}\NormalTok{,}
+    \DataTypeTok{col.names =} \KeywordTok{c}\NormalTok{(}\StringTok{"Variável"}\NormalTok{, }\StringTok{"No. Faltantes"}\NormalTok{, }\StringTok{"Completude"}\NormalTok{),}
+    \DataTypeTok{caption =} \StringTok{"Dados faltantes na amostra."}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kable_styling}\NormalTok{(}\DataTypeTok{latex_options =} \KeywordTok{c}\NormalTok{(}\StringTok{"HOLD_position"}\NormalTok{)) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kable_classic}\NormalTok{(}\DataTypeTok{full_width =} \OtherTok{FALSE}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{footnote}\NormalTok{(}\DataTypeTok{general_title =} \StringTok{"Nota:"}\NormalTok{,}
+           \DataTypeTok{general =} \StringTok{"Completude refere-se a proporção de linhas preenchidas contra faltantes, e varia de zero a um."}\NormalTok{,}
+           \DataTypeTok{threeparttable =} \OtherTok{TRUE}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{save_kable}\NormalTok{(}\StringTok{"./Tables/table_missings.tex"}\NormalTok{)}
+
+\CommentTok{#' Analise Exploratoria}
+\CommentTok{#' Problema de atrito}
+\NormalTok{attrition_level <-}\StringTok{ }\NormalTok{data }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{filter}\NormalTok{(mailing }\OperatorTok{==}\StringTok{ }\DecValTok{1}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{group_by}\NormalTok{(treatment, Buckets, Description) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{mail_count =} \KeywordTok{n}\NormalTok{(),}
+            \DataTypeTok{deliv_na_count =} \KeywordTok{sum}\NormalTok{(}\KeywordTok{is.na}\NormalTok{(delivered)),}
+            \DataTypeTok{deliv_0_count =} \KeywordTok{sum}\NormalTok{(delivered }\OperatorTok{==}\StringTok{ }\DecValTok{0}\NormalTok{),}
+            \DataTypeTok{attr_rate =}\NormalTok{ (deliv_na_count }\OperatorTok{+}\StringTok{ }\NormalTok{deliv_}\DecValTok{0}\NormalTok{_count) }\OperatorTok{/}\StringTok{ }\KeywordTok{nrow}\NormalTok{(}\KeywordTok{cur_data}\NormalTok{()))}
+\NormalTok{chi_test <-}\StringTok{ }\KeywordTok{chisq.test}\NormalTok{(attrition_level}\OperatorTok{$}\NormalTok{deliv_}\DecValTok{0}\NormalTok{_count, }
+                       \DataTypeTok{p =}\NormalTok{ attrition_level}\OperatorTok{$}\NormalTok{mail_count, }\DataTypeTok{rescale.p =} \OtherTok{TRUE}\NormalTok{)}
+\NormalTok{atrito_foot <-}\StringTok{ }\KeywordTok{glue}\NormalTok{(}\StringTok{"Na média total a taxa de atrito foi de \{format(mean(attrition_level$attr_rate), digits = 4)\} e não houve diferença entre tratamentos, como aponta o teste qui-quadrado de Pearson para dados de contagem, com p-valor de \{format(chi_test$p.value, digits = 4)\}."}\NormalTok{)}
+\CommentTok{#' Tabela 5 detalhando o nivel de atrito por tratamento}
+\KeywordTok{kbl}\NormalTok{(attrition_level[}\OperatorTok{-}\DecValTok{1}\NormalTok{], }\DataTypeTok{digits =} \DecValTok{4}\NormalTok{, }\DataTypeTok{format =} \StringTok{"latex"}\NormalTok{, }\DataTypeTok{booktabs =} \OtherTok{TRUE}\NormalTok{, }
+    \DataTypeTok{label =} \StringTok{"atrito-level"}\NormalTok{, }
+    \DataTypeTok{col.names =} \KeywordTok{c}\NormalTok{(}\StringTok{"Tratamento"}\NormalTok{, }\StringTok{"Descrição"}\NormalTok{, }\StringTok{"Cartas"}\NormalTok{, }\StringTok{"Entregues NA"}\NormalTok{, }
+                  \StringTok{"Não Entregues"}\NormalTok{, }\StringTok{"Taxa Atrito"}\NormalTok{),}
+    \DataTypeTok{caption =} \StringTok{"Taxa de atrito por tratamento."}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kable_styling}\NormalTok{(}\DataTypeTok{latex_options =} \KeywordTok{c}\NormalTok{(}\StringTok{"HOLD_position"}\NormalTok{)) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kable_classic}\NormalTok{(}\DataTypeTok{full_width =} \OtherTok{FALSE}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{footnote}\NormalTok{(}\DataTypeTok{general_title =} \StringTok{"Nota:"}\NormalTok{, }\DataTypeTok{general =}\NormalTok{ atrito_foot,}
+           \DataTypeTok{threeparttable =} \OtherTok{TRUE}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{save_kable}\NormalTok{(}\StringTok{"./Tables/table_atrito_level.tex"}\NormalTok{)}
+\CommentTok{#' Todos os NAs se referem ao grupo de controle, mas houve um pouco de atrito.}
+\CommentTok{#' Verificar balanceamento de variaveis para aqueles que atritaram}
+\NormalTok{atrito_controle <-}\StringTok{ }\NormalTok{data }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{filter}\NormalTok{(mailing }\OperatorTok{==}\StringTok{ }\DecValTok{0} \OperatorTok{|}\StringTok{ }\NormalTok{(mailing }\OperatorTok{==}\StringTok{ }\DecValTok{1} \OperatorTok{&}\StringTok{ }\NormalTok{delivered }\OperatorTok{==}\StringTok{ }\DecValTok{0}\NormalTok{))}
+
+\NormalTok{attr_bal <-}\StringTok{ }\NormalTok{atrito_controle }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{group_by}\NormalTok{(treatment, Buckets) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{summarise}\NormalTok{(}\KeywordTok{across}\NormalTok{(}\KeywordTok{c}\NormalTok{(gender, age_aver, inc_aver, pop2005, pop_density2005, }
+\NormalTok{                     compliance), }
+\NormalTok{                   mean, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{))}
+\CommentTok{#' Teste anova para diferenca de medias}
+\NormalTok{attr_anova <-}\StringTok{ }\KeywordTok{tibble}\NormalTok{(}\DataTypeTok{var =} \KeywordTok{c}\NormalTok{(}\StringTok{"gender"}\NormalTok{, }\StringTok{"age_aver"}\NormalTok{, }\StringTok{"inc_aver"}\NormalTok{, }\StringTok{"pop2005"}\NormalTok{, }
+                                    \StringTok{"pop_density2005"}\NormalTok{, }\StringTok{"compliance"}\NormalTok{)) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{rowwise}\NormalTok{() }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{anov =} \KeywordTok{list}\NormalTok{(}\KeywordTok{anova}\NormalTok{(}\KeywordTok{lm}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(var, }\StringTok{"~treatment"}\NormalTok{), }\DataTypeTok{data =}\NormalTok{ atrito_controle))),}
+         \DataTypeTok{pval =}\NormalTok{ anov[}\StringTok{"treatment"}\NormalTok{, }\StringTok{"Pr(>F)"}\NormalTok{]) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{select}\NormalTok{(var,pval) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{pivot_wider}\NormalTok{(}\DataTypeTok{names_from =}\NormalTok{ var, }\DataTypeTok{values_from =}\NormalTok{ pval) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{add_column}\NormalTok{(}\DataTypeTok{Buckets =} \StringTok{"Anova p-valor"}\NormalTok{, }\DataTypeTok{.before =} \DecValTok{1}\NormalTok{)}
+
+\NormalTok{atr_bal_foot <-}\StringTok{ "Gênero igual a zero para mulher. Demais variáveis são denominadas em nível municipal, por exemplo Idade refere-se a idade média dos habitantes do município de residência do indivíduo."}
+\CommentTok{#' Tabela 6 balanceamento com atrito}
+\NormalTok{attr_bal[}\OperatorTok{-}\DecValTok{1}\NormalTok{] }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{bind_rows}\NormalTok{(attr_anova) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kbl}\NormalTok{(}\DataTypeTok{digits =} \DecValTok{4}\NormalTok{, }\DataTypeTok{format =} \StringTok{"latex"}\NormalTok{, }\DataTypeTok{booktabs =} \OtherTok{TRUE}\NormalTok{, }\DataTypeTok{label =} \StringTok{"atrito-bal"}\NormalTok{,}
+      \DataTypeTok{col.names =} \KeywordTok{c}\NormalTok{(}\StringTok{"Tratamento"}\NormalTok{, }\StringTok{"Gênero", "}\NormalTok{Idade}\StringTok{", "}\NormalTok{Renda}\StringTok{", "}\NormalTok{População}\StringTok{", }
+\StringTok{                    "}\NormalTok{Dens. pop.}\StringTok{", "}\NormalTok{Compliance}\StringTok{"),}
+\StringTok{      caption = "}\NormalTok{Análise de atrito. Balanceamento de variáveis selecionadas}\StringTok{") %>% }
+\StringTok{  kable_styling(latex_options = c("}\NormalTok{HOLD_position}\StringTok{")) %>% }
+\StringTok{  kable_classic(full_width = FALSE) %>% }
+\StringTok{  footnote(general_title = "}\NormalTok{Nota}\OperatorTok{:}\StringTok{",}
+\StringTok{           threeparttable = TRUE,}
+\StringTok{           general = atr_bal_foot) %>% }
+\StringTok{  save_kable("}\NormalTok{.}\OperatorTok{/}\NormalTok{Tables}\OperatorTok{/}\NormalTok{table_atrito_bal.tex}\StringTok{")}
+\StringTok{#' Histograma com designacao de tratamento e atrito}
+\StringTok{hist1 <- data %>% }
+\StringTok{  filter(treatment %in% c("}\DecValTok{0}\StringTok{", "}\DecValTok{6}\StringTok{"), pop_density2005 < 30) %>% }
+\StringTok{  select(treatment, pop_density2005) %>% }
+\StringTok{  ggplot(aes(x = pop_density2005, y = ..density.., fill = treatment)) +}
+\StringTok{  geom_histogram(bins = 50, alpha = 0.8, position = "}\NormalTok{dodge}\StringTok{") +}
+\StringTok{  labs(x = "",}
+\StringTok{       y = "}\NormalTok{Frequência relativa}\StringTok{",}
+\StringTok{       title = "}\NormalTok{Tratamento designado}\StringTok{") +}
+\StringTok{  guides(fill = guide_legend(title = "}\NormalTok{Tratamento}\StringTok{")) +}
+\StringTok{  scale_fill_discrete(type = c("}\NormalTok{blue}\StringTok{", "}\NormalTok{red}\StringTok{")) +}
+\StringTok{  theme_classic()}
+
+\StringTok{hist2 <- atrito_controle %>% }
+\StringTok{  filter(treatment %in% c("}\DecValTok{0}\StringTok{", "}\DecValTok{6}\StringTok{"), pop_density2005 < 30) %>% }
+\StringTok{  select(treatment, pop_density2005) %>% }
+\StringTok{  ggplot(aes(x = pop_density2005, y = ..density.., fill = treatment)) +}
+\StringTok{  geom_histogram(bins = 50, alpha = 0.8, position = "}\NormalTok{dodge}\StringTok{") +}
+\StringTok{  labs(x = "}\NormalTok{Densidade }\KeywordTok{Populacional}\NormalTok{ (hab}\OperatorTok{/}\NormalTok{km2)}\StringTok{",}
+\StringTok{       y = "}\NormalTok{Frequência relativa}\StringTok{",}
+\StringTok{       title = "}\NormalTok{Atrito}\StringTok{") +}
+\StringTok{  guides(fill = guide_legend(title = "}\NormalTok{Tratamento}\StringTok{")) +}
+\StringTok{  scale_fill_discrete(type = c("}\NormalTok{blue}\StringTok{", "}\NormalTok{red}\StringTok{")) +}
+\StringTok{  theme_classic()}
+\StringTok{png("}\NormalTok{.}\OperatorTok{/}\NormalTok{Figs}\OperatorTok{/}\NormalTok{fig_atr_hist.png}\StringTok{")}
+\StringTok{gridExtra::grid.arrange(hist1, hist2)}
+\StringTok{dev.off()}
+
+\StringTok{#' Replicacao das tabelas 1 e 2 de Fellner et al.}
+\StringTok{#' }
+\StringTok{#' Tabela 1}
+\StringTok{gtab1 <- data %>% }
+\StringTok{  group_by(treatment, Buckets, Description) %>% }
+\StringTok{  summarise(across(c(gender, age_aver, inc_aver, pop2005, }
+\StringTok{                     pop_density2005, compliance),}
+\StringTok{                   mean, na.rm = TRUE))}
+
+\StringTok{anova_results <- data.frame(var = c("}\NormalTok{gender}\StringTok{", "}\NormalTok{age_aver}\StringTok{", "}\NormalTok{inc_aver}\StringTok{", "}\NormalTok{pop2005}\StringTok{", }
+\StringTok{                                    "}\NormalTok{pop_density2005}\StringTok{", "}\NormalTok{compliance}\StringTok{")) %>% }
+\StringTok{  rowwise() %>% }
+\StringTok{  mutate(anov = list(anova(lm(paste0(var, "}\OperatorTok{~}\NormalTok{treatment}\StringTok{"), data = data))),}
+\StringTok{         pval = anov["}\NormalTok{treatment}\StringTok{", "}\KeywordTok{Pr}\NormalTok{(}\OperatorTok{>}\NormalTok{F)}\StringTok{"])}
+\StringTok{anov_row <- anova_results %>% }
+\StringTok{  select(-anov) %>% }
+\StringTok{  pivot_wider(names_from = var, values_from = pval) %>% }
+\StringTok{  mutate(Buckets = "}\NormalTok{Anova}\OperatorTok{:}\StringTok{ ",}
+\StringTok{         Description = "}\NormalTok{p}\OperatorTok{-}\NormalTok{values}\StringTok{") %>% }
+\StringTok{  select(Buckets, Description, everything())}
+
+\StringTok{#' Tabela 4 balanceamento. Table 1 de Fellner et. al}
+\StringTok{tbl1_cap <- "}\NormalTok{Balanceamento de características individuais e por município por tipo de tratamento.}\StringTok{"}
+\StringTok{gtab1[-1] %>% }
+\StringTok{  bind_rows(anov_row) %>% }
+\StringTok{  kbl(digits = 4, booktabs = TRUE, format = "}\NormalTok{latex}\StringTok{", label = "}\NormalTok{tab1}\StringTok{",     }
+\StringTok{      col.names = c("}\NormalTok{Tratamento}\StringTok{", "}\NormalTok{Descrição}\StringTok{", "}\NormalTok{Gênero", }\StringTok{"Idade"}\NormalTok{, }\StringTok{"Renda"}\NormalTok{,}
+                    \StringTok{"População"}\NormalTok{, }\StringTok{"Dens. pop."}\NormalTok{, }\StringTok{"Compliance"}\NormalTok{),}
+      \DataTypeTok{caption =}\NormalTok{ tbl1_cap) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kable_styling}\NormalTok{(}\DataTypeTok{latex_options =} \StringTok{"HOLD_position"}\NormalTok{, }\DataTypeTok{font_size =} \DecValTok{10}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{kable_classic}\NormalTok{(}\DataTypeTok{full_width =} \OtherTok{FALSE}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{footnote}\NormalTok{(}\DataTypeTok{general_title =} \StringTok{"Nota:"}\NormalTok{,}
+           \DataTypeTok{threeparttable =} \OtherTok{TRUE}\NormalTok{,}
+           \DataTypeTok{general =}\NormalTok{ atr_bal_foot) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{save_kable}\NormalTok{(}\DataTypeTok{file =} \StringTok{"./Tables/table1.tex"}\NormalTok{)}
+
+\CommentTok{#' Regressoes da Tabela 7}
+\CommentTok{#' }
+\NormalTok{reg_}\DecValTok{21}\NormalTok{ <-}\StringTok{ }\KeywordTok{feols}\NormalTok{(resp_A}\OperatorTok{~}\NormalTok{mailing}\OperatorTok{+}\NormalTok{threat}\OperatorTok{+}\NormalTok{appeal}\OperatorTok{+}\NormalTok{info, }\DataTypeTok{data =}\NormalTok{ data)}
+\NormalTok{reg_}\DecValTok{22}\NormalTok{ <-}\StringTok{ }\KeywordTok{feols}\NormalTok{(resp_A}\OperatorTok{~}\NormalTok{mailing}\OperatorTok{+}\NormalTok{threat}\OperatorTok{+}\NormalTok{appeal}\OperatorTok{+}\NormalTok{info}\OperatorTok{+}\NormalTok{i_tinf}\OperatorTok{+}\NormalTok{i_tapp, }\DataTypeTok{data =}\NormalTok{ data)}
+
+\NormalTok{delivered <-}\StringTok{ }\NormalTok{data }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{filter}\NormalTok{(delivered }\OperatorTok{==}\StringTok{ }\DecValTok{1}\NormalTok{)}
+\NormalTok{reg_}\DecValTok{23}\NormalTok{ <-}\StringTok{ }\KeywordTok{feols}\NormalTok{(resp_B}\OperatorTok{~}\NormalTok{threat}\OperatorTok{+}\NormalTok{appeal}\OperatorTok{+}\NormalTok{info, }\DataTypeTok{data =}\NormalTok{ delivered)}
+\NormalTok{reg_}\DecValTok{24}\NormalTok{ <-}\StringTok{ }\KeywordTok{feols}\NormalTok{(resp_B}\OperatorTok{~}\NormalTok{threat}\OperatorTok{+}\NormalTok{appeal}\OperatorTok{+}\NormalTok{info}\OperatorTok{+}\NormalTok{i_tinf}\OperatorTok{+}\NormalTok{i_tapp, }\DataTypeTok{data =}\NormalTok{ delivered)}
+\NormalTok{reg_}\DecValTok{25}\NormalTok{ <-}\StringTok{ }\KeywordTok{feols}\NormalTok{(resp_all}\OperatorTok{~}\NormalTok{threat}\OperatorTok{+}\NormalTok{appeal}\OperatorTok{+}\NormalTok{info, }\DataTypeTok{data =}\NormalTok{ delivered)}
+\NormalTok{reg_}\DecValTok{26}\NormalTok{ <-}\StringTok{ }\KeywordTok{feols}\NormalTok{(resp_all}\OperatorTok{~}\NormalTok{threat}\OperatorTok{+}\NormalTok{appeal}\OperatorTok{+}\NormalTok{info}\OperatorTok{+}\NormalTok{i_tinf}\OperatorTok{+}\NormalTok{i_tapp, }\DataTypeTok{data =}\NormalTok{ delivered)}
+
+\CommentTok{#' Dicionário para o nome das variáveis nas tabelas}
+\NormalTok{fixest}\OperatorTok{::}\KeywordTok{setFixest_dict}\NormalTok{(}\KeywordTok{c}\NormalTok{(}\DataTypeTok{resp_A =} \StringTok{"Registro"}\NormalTok{, }
+                         \DataTypeTok{resp_B =} \StringTok{"Atual. Contratual"}\NormalTok{, }
+                         \DataTypeTok{resp_all =} \StringTok{"Resposta Geral"}\NormalTok{,}
+                         \DataTypeTok{mailing =} \StringTok{"Correio"}\NormalTok{,}
+                         \DataTypeTok{threat =} \StringTok{"Ameaça"}\NormalTok{,}
+                         \DataTypeTok{appeal =} \StringTok{"Moral"}\NormalTok{,}
+                         \DataTypeTok{info =} \StringTok{"Info"}\NormalTok{,}
+                         \DataTypeTok{i_tinf =} \StringTok{"Ameaça x Info"}\NormalTok{,}
+                         \DataTypeTok{i_tapp =} \StringTok{"Ameaça x Moral"}\NormalTok{,}
+                         \DataTypeTok{threat_evasion_D1 =} \StringTok{"Ameaça x Evasão"}\NormalTok{,}
+                         \DataTypeTok{appeal_evasion_D1 =} \StringTok{"Moral x Evasão"}\NormalTok{,}
+                         \DataTypeTok{info_evasion_D1 =} \StringTok{"Info x Evasão"}\NormalTok{,}
+                         \DataTypeTok{evasion_1 =} \StringTok{"Evasão"}\NormalTok{,}
+                         \DataTypeTok{threat_evasion_D2 =} \StringTok{"Ameaça x Evasão"}\NormalTok{,}
+                         \DataTypeTok{appeal_evasion_D2 =} \StringTok{"Moral x Evasão"}\NormalTok{,}
+                         \DataTypeTok{info_evasion_D2 =} \StringTok{"Info x Evasão"}\NormalTok{,}
+                         \DataTypeTok{evasion_2 =} \StringTok{"Evasão"}\NormalTok{,}
+                         \StringTok{"(Intercept)"}\NormalTok{ =}\StringTok{ "Constante"}\NormalTok{))}
+\CommentTok{#' Ajusta o estilo das tabelas}
+\NormalTok{est_style =}\StringTok{ }\KeywordTok{list}\NormalTok{(}\DataTypeTok{depvar =} \StringTok{"title:Dep. Var."}\NormalTok{,}
+                 \DataTypeTok{model =} \StringTok{"title:Modelo"}\NormalTok{,}
+                 \DataTypeTok{var =} \StringTok{"title:}\CharTok{\textbackslash{}\textbackslash{}}\StringTok{emph\{Variáveis\}"}\NormalTok{,}
+                 \DataTypeTok{stats =} \StringTok{"title:}\CharTok{\textbackslash{}\textbackslash{}}\StringTok{emph\{Estatísticas de diagnóstico\}"}\NormalTok{,}
+                 \DataTypeTok{notes =} \StringTok{"title:}\CharTok{\textbackslash{}\textbackslash{}}\StringTok{emph\{}\CharTok{\textbackslash{}\textbackslash{}}\StringTok{medskip Notas:\}"}\NormalTok{)}
+\CommentTok{#' Cria a Tabela 7. Table 2 in Fellner et. al}
+\KeywordTok{esttex}\NormalTok{(reg_}\DecValTok{21}\NormalTok{, reg_}\DecValTok{22}\NormalTok{, reg_}\DecValTok{23}\NormalTok{, reg_}\DecValTok{24}\NormalTok{, reg_}\DecValTok{25}\NormalTok{, reg_}\DecValTok{26}\NormalTok{,}
+       \DataTypeTok{file =} \StringTok{"./Tables/table2.tex"}\NormalTok{,}
+       \DataTypeTok{label =} \StringTok{"tab:tab2"}\NormalTok{,}
+       \DataTypeTok{style =}\NormalTok{ est_style,}
+       \DataTypeTok{replace =} \OtherTok{TRUE}\NormalTok{,}
+       \DataTypeTok{se =} \StringTok{"White"}\NormalTok{,}
+       \DataTypeTok{digits =} \DecValTok{3}\NormalTok{,}
+       \DataTypeTok{fitstat =} \StringTok{""}\NormalTok{,}
+       \DataTypeTok{order =} \KeywordTok{c}\NormalTok{(}\StringTok{"Correio"}\NormalTok{, }\StringTok{"^Ameaça$"}\NormalTok{, }\StringTok{"^Moral$"}\NormalTok{, }\StringTok{"^Info$"}\NormalTok{, }\StringTok{"Ameaça x Moral"}\NormalTok{,}
+                 \StringTok{"Ameaça x Info"}\NormalTok{, }\StringTok{"Constante"}\NormalTok{),}
+       \DataTypeTok{title =} \StringTok{"Efeito do tratamento nos registros, atualizações contratuais, and resposta geral para o modelo de regressão linear."}\NormalTok{)}
+
+\CommentTok{#' Efeitos Heterogeneos}
+\CommentTok{#' Replicacao da Table C1}
+\CommentTok{#' Mediana da população dos municípios, da densidade, da renda e de votantes}
+\CommentTok{#' a direita}
+\NormalTok{med_pop <-}\StringTok{ }\KeywordTok{median}\NormalTok{(data}\OperatorTok{$}\NormalTok{pop2005, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
+\NormalTok{med_den <-}\StringTok{ }\KeywordTok{median}\NormalTok{(data}\OperatorTok{$}\NormalTok{pop_density2005, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
+\NormalTok{med_rend <-}\StringTok{ }\KeywordTok{median}\NormalTok{(data}\OperatorTok{$}\NormalTok{inc_aver, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
+\NormalTok{med_vot <-}\StringTok{ }\KeywordTok{median}\NormalTok{(data}\OperatorTok{$}\NormalTok{vo_cr }\OperatorTok{+}\StringTok{ }\NormalTok{data}\OperatorTok{$}\NormalTok{vo_r, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
+\CommentTok{#' Dataframe com indicadores de acima da mediana}
+\NormalTok{efeito_het_df <-}\StringTok{ }\NormalTok{data }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{pop_hi =}\NormalTok{ pop2005 }\OperatorTok{>=}\StringTok{ }\NormalTok{med_pop,}
+         \DataTypeTok{popdens_hi =}\NormalTok{ pop_density2005 }\OperatorTok{>=}\StringTok{ }\NormalTok{med_den,}
+         \DataTypeTok{rend_hi =}\NormalTok{ inc_aver }\OperatorTok{>=}\StringTok{ }\NormalTok{med_rend,}
+         \DataTypeTok{vot_hi =}\NormalTok{ (vo_cr }\OperatorTok{+}\StringTok{ }\NormalTok{vo_r) }\OperatorTok{>=}\StringTok{ }\NormalTok{med_vot)}
+\CommentTok{#' Conjunto de variáveis de controle}
+\NormalTok{Z_extended <-}\StringTok{ }\KeywordTok{gsub}\NormalTok{(}\StringTok{"}\CharTok{\textbackslash{}\textbackslash{}}\StringTok{s+"}\NormalTok{, }\StringTok{"+"}\NormalTok{,}
+                   \StringTok{"pop_density2005 pop2005 nat_EU nat_nonEU fam_marri fam_divor_widow}
+\StringTok{                   edu_hi edu_lo rel_evan rel_isla rel_orth_other rel_obk pers2 pers3 pers4}
+\StringTok{                   pers5more  vo_r vo_cl vo_l  j_unempl j_retire j_house j_studen}
+\StringTok{                   inc_aver age0_30 age30_60  bgld kaern noe ooe salzbg steierm }
+\StringTok{                   tirol vlbg wien schober"}\NormalTok{)}
+\CommentTok{#' Regressões para efeitos heterogêneos}
+\CommentTok{#' formulas}
+\NormalTok{form_str <-}\StringTok{ }\KeywordTok{paste0}\NormalTok{(}\StringTok{"resp_A~threat+appeal+info+gender+compliance_t+"}\NormalTok{, Z_extended)}
+\CommentTok{#' Default do erro padrão é ser robusto a heterocedasticidade}
+\NormalTok{fixest}\OperatorTok{::}\KeywordTok{setFixest_se}\NormalTok{(}\DataTypeTok{no_FE =} \StringTok{"white"}\NormalTok{)}
+\NormalTok{het_reg_pop <-}\StringTok{ }\NormalTok{efeito_het_df }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{filter}\NormalTok{(delivered }\OperatorTok{==}\StringTok{ }\DecValTok{1}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{group_by}\NormalTok{(pop_hi) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{lm_model =} \KeywordTok{list}\NormalTok{(}\KeywordTok{feols}\NormalTok{(}\KeywordTok{as.formula}\NormalTok{(form_str), }\DataTypeTok{data =} \KeywordTok{cur_data}\NormalTok{())))}
+
+\NormalTok{het_reg_den <-}\StringTok{ }\NormalTok{efeito_het_df }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{filter}\NormalTok{(delivered }\OperatorTok{==}\StringTok{ }\DecValTok{1}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{group_by}\NormalTok{(popdens_hi) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{lm_model =} \KeywordTok{list}\NormalTok{(}\KeywordTok{feols}\NormalTok{(}\KeywordTok{as.formula}\NormalTok{(form_str), }\DataTypeTok{data =} \KeywordTok{cur_data}\NormalTok{())))}
+
+\NormalTok{het_reg_rend <-}\StringTok{ }\NormalTok{efeito_het_df }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{filter}\NormalTok{(delivered }\OperatorTok{==}\StringTok{ }\DecValTok{1}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{group_by}\NormalTok{(rend_hi) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{lm_model =} \KeywordTok{list}\NormalTok{(}\KeywordTok{feols}\NormalTok{(}\KeywordTok{as.formula}\NormalTok{(form_str), }\DataTypeTok{data =} \KeywordTok{cur_data}\NormalTok{())))}
+
+\NormalTok{het_reg_vot <-}\StringTok{ }\NormalTok{efeito_het_df }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{filter}\NormalTok{(delivered }\OperatorTok{==}\StringTok{ }\DecValTok{1}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{group_by}\NormalTok{(vot_hi) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{lm_model =} \KeywordTok{list}\NormalTok{(}\KeywordTok{feols}\NormalTok{(}\KeywordTok{as.formula}\NormalTok{(form_str), }\DataTypeTok{data =} \KeywordTok{cur_data}\NormalTok{())))}
+
+\CommentTok{#' Tabela 8}
+\KeywordTok{esttex}\NormalTok{(het_reg_pop}\OperatorTok{$}\NormalTok{lm_model, het_reg_den}\OperatorTok{$}\NormalTok{lm_model, het_reg_rend}\OperatorTok{$}\NormalTok{lm_model, }
+\NormalTok{       het_reg_vot}\OperatorTok{$}\NormalTok{lm_model,}
+       \DataTypeTok{file =} \StringTok{"./Tables/tablec1.tex"}\NormalTok{,}
+       \DataTypeTok{label =} \StringTok{"tab:tabc1"}\NormalTok{,}
+       \DataTypeTok{style =}\NormalTok{ est_style,}
+       \DataTypeTok{replace =} \OtherTok{TRUE}\NormalTok{,}
+       \DataTypeTok{se =} \StringTok{"White"}\NormalTok{,}
+       \DataTypeTok{digits =} \DecValTok{3}\NormalTok{,}
+       \DataTypeTok{fitstat =} \StringTok{""}\NormalTok{,}
+       \DataTypeTok{keep =} \KeywordTok{c}\NormalTok{(}\StringTok{"^Ameaça$"}\NormalTok{, }\StringTok{"^Moral$"}\NormalTok{, }\StringTok{"^Info$"}\NormalTok{),}
+       \DataTypeTok{order =} \KeywordTok{c}\NormalTok{(}\StringTok{"^Ameaça$"}\NormalTok{, }\StringTok{"^Moral$"}\NormalTok{, }\StringTok{"^Info$"}\NormalTok{),}
+       \DataTypeTok{title =} \StringTok{"Efeito heterogêneo do tratamento. Modelo de regressão linear."}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}

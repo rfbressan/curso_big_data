@@ -1,0 +1,29 @@
+\begin{table}
+\centering
+\caption{Efeitos heterogêneos do tratamento estimados por Doubly Robust IV.}
+\label{tab:dml-summary}
+\begin{threeparttable}
+\begin{tabular}{lllll}
+\toprule\toprule
+    X &    Correio &     Ameaça &       Info &       Moral \\
+\midrule
+ Média &   0.0650** &  0.0570*** &  0.0320*** &     0.0480* \\
+  &   (0.0250) &   (0.0140) &   (0.0120) &    (0.0250) \\
+  Mínimo &   -0.1140* &     0.1910 &   0.3500** &  -0.2570*** \\
+   &   (0.1980) &   (0.2040) &   (0.2020) &    (0.1480) \\
+  25\% &    0.0570* &     0.0260 &     0.0280 &      0.0110 \\
+   &   (0.0430) &   (0.0470) &   (0.0290) &    (0.0370) \\
+  50\% &  0.0420*** &  0.0700*** &  0.0360*** &    0.0410** \\
+   &   (0.0100) &   (0.0150) &   (0.0150) &    (0.0150) \\
+  75\% &     0.0420 &  0.1530*** &     0.0540 &   0.1370*** \\
+   &   (0.0600) &   (0.0570) &   (0.0550) &    (0.0550) \\
+  Máximo &   0.4440** &     0.1660 &     0.0740 &      0.2680 \\
+   &   (0.2220) &   (0.2810) &   (0.1720) &    (0.1890) \\
+\bottomrule\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\item \emph{Nível Significância: ***: 0.01, **: 0.05, *: 0.1}\\
+\item \emph{Nota: os estágios de previsão foram gradient boosted tree (regressão) para $E[Y|\bfx]$ e gbm (classificação) $E[T|\bfx]$. O modelo final para o efeito condicional do tratamento, $\theta(\bfx)$, também foi uma gbm-regressão, porém mais rasa, com apenas 3 níveis de profundidade.}
+\end{tablenotes}
+\end{threeparttable}
+\end{table}

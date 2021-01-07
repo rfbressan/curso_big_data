@@ -1,0 +1,537 @@
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# Metodos de Machine Learning para inferencia causal}
+\CommentTok{# com dados de Fellner et all (2013)}
+\CommentTok{# Autor: Rafael Felipe Bressan}
+\CommentTok{# Arquivo: script_py.py}
+\CommentTok{# Script Python para o trabalho monografico: Inferência Causal com Machine }
+\CommentTok{# Learning uma aplicacao para evasao fiscal}
+\CommentTok{# Pós-Graduacao Lato Sensu em Ciencia de Dados e Big Data PUC-MG}
+\CommentTok{# Ano: 2021}
+
+\CommentTok{# importa bibliotecas necessarias}
+\ImportTok{import}\NormalTok{ gc}
+\ImportTok{from}\NormalTok{ copy }\ImportTok{import}\NormalTok{ deepcopy}
+\ImportTok{import}\NormalTok{ numpy }\ImportTok{as}\NormalTok{ np}
+\ImportTok{import}\NormalTok{ pandas }\ImportTok{as}\NormalTok{ pd }
+
+\CommentTok{# Regressao linear e IV}
+\ImportTok{import}\NormalTok{ statsmodels.api }\ImportTok{as}\NormalTok{ sm}
+\ImportTok{from}\NormalTok{ linearmodels }\ImportTok{import}\NormalTok{ IV2SLS}
+
+\CommentTok{# Modelos de ML}
+\ImportTok{import}\NormalTok{ lightgbm }\ImportTok{as}\NormalTok{ lgb }
+\ImportTok{from}\NormalTok{ sklearn.preprocessing }\ImportTok{import}\NormalTok{ PolynomialFeatures}
+\ImportTok{from}\NormalTok{ sklearn.linear_model }\ImportTok{import}\NormalTok{ LogisticRegression, Lasso}
+\ImportTok{from}\NormalTok{ sklearn.ensemble }\ImportTok{import}\NormalTok{ RandomForestRegressor}
+
+\CommentTok{# EconML}
+\ImportTok{from}\NormalTok{ econml.ortho_iv }\ImportTok{import}\NormalTok{ DMLATEIV, IntentToTreatDRIV}
+\ImportTok{from}\NormalTok{ econml.cate_interpreter }\ImportTok{import}\NormalTok{ SingleTreeCateInterpreter}
+\ImportTok{from}\NormalTok{ econml.dml }\ImportTok{import}\NormalTok{ ForestDML, DML, SparseLinearDML}
+\ImportTok{from}\NormalTok{ econml.causal_forest }\ImportTok{import}\NormalTok{ CausalForest}
+
+\CommentTok{# Graficos}
+\ImportTok{import}\NormalTok{ matplotlib.pyplot }\ImportTok{as}\NormalTok{ plt}
+
+\CommentTok{# Funcoes auxiliares}
+\KeywordTok{def}\NormalTok{ stars(x, levels}\OperatorTok{=}\NormalTok{[}\FloatTok{0.1}\NormalTok{, }\FloatTok{0.05}\NormalTok{, }\FloatTok{0.01}\NormalTok{]):}
+    \ControlFlowTok{assert}\NormalTok{ (}\BuiltInTok{len}\NormalTok{(levels)}\OperatorTok{==}\DecValTok{3}\NormalTok{), }\StringTok{"Comprimento de levels deve ser 3."}
+    
+    \ControlFlowTok{if}\NormalTok{ x}\OperatorTok{>}\NormalTok{levels[}\DecValTok{0}\NormalTok{]:}
+        \ControlFlowTok{return} \StringTok{''}
+    \ControlFlowTok{elif}\NormalTok{ x}\OperatorTok{>}\NormalTok{levels[}\DecValTok{1}\NormalTok{]:}
+        \ControlFlowTok{return} \StringTok{'*'}
+    \ControlFlowTok{elif}\NormalTok{ x}\OperatorTok{>}\NormalTok{levels[}\DecValTok{2}\NormalTok{]:}
+        \ControlFlowTok{return} \StringTok{'**'}
+    \ControlFlowTok{else}\NormalTok{:}
+        \ControlFlowTok{return} \StringTok{'***'}
+
+\KeywordTok{def}\NormalTok{ format_float(x, digits):}
+    \ControlFlowTok{return} \StringTok{'\{:.}\SpecialCharTok{\{dig\}}\StringTok{f\}'}\NormalTok{.}\BuiltInTok{format}\NormalTok{(x, dig}\OperatorTok{=}\NormalTok{digits)}
+
+\KeywordTok{def}\NormalTok{ surr_parenthesis(x, digits):}
+    \ControlFlowTok{return} \StringTok{'('}\OperatorTok{+}\StringTok{'\{:.}\SpecialCharTok{\{dig\}}\StringTok{f\}'}\NormalTok{.}\BuiltInTok{format}\NormalTok{(x, dig}\OperatorTok{=}\NormalTok{digits)}\OperatorTok{+}\StringTok{')'}
+
+
+\CommentTok{# Carregando os dados}
+\NormalTok{data }\OperatorTok{=}\NormalTok{ pd.read_stata(}\StringTok{"data_final.dta"}\NormalTok{).sort_values(}\StringTok{"treatment"}\NormalTok{)}
+\NormalTok{X_cols }\OperatorTok{=}\NormalTok{ [}\StringTok{"gender"}\NormalTok{, }\StringTok{"pop_density2005"}\NormalTok{, }
+    \StringTok{"compliance"}\NormalTok{, }\StringTok{"compliance_t"}\NormalTok{, }\StringTok{"vo_r"}\NormalTok{, }\StringTok{"vo_cr"}\NormalTok{, }\StringTok{"vo_cl"}\NormalTok{, }\StringTok{"vo_l"}\NormalTok{, }
+    \StringTok{"inc_aver"}\NormalTok{, }\StringTok{"edu_aver"}\NormalTok{, }\StringTok{"edu_lo"}\NormalTok{, }\StringTok{"edu_mi"}\NormalTok{, }\StringTok{"edu_hi"}\NormalTok{, }
+    \StringTok{"age_aver"}\NormalTok{, }\StringTok{"age0_30"}\NormalTok{, }\StringTok{"age30_60"}\NormalTok{, }\StringTok{"nat_A"}\NormalTok{, }\StringTok{"nat_EU"}\NormalTok{, }\StringTok{"nat_nonEU"}\NormalTok{]}
+    
+\CommentTok{################################################################}
+\CommentTok{# Ignorando o atrito e estimando os efeitos apenas para }
+\CommentTok{# delivered == 1}
+\CommentTok{################################################################}
+\NormalTok{deliv }\OperatorTok{=}\NormalTok{ data[data[}\StringTok{"delivered"}\NormalTok{]}\OperatorTok{!=}\DecValTok{0}\NormalTok{].fillna(}\DecValTok{0}\NormalTok{)}
+\CommentTok{# Para avaliacao de efeitos heterogeneos}
+\NormalTok{X_eval }\OperatorTok{=}\NormalTok{ (deliv[X_cols]}
+\NormalTok{    .describe()}
+\NormalTok{    .loc[[}\StringTok{"mean"}\NormalTok{, }\StringTok{"min"}\NormalTok{, }\StringTok{"25%"}\NormalTok{, }\StringTok{"50%"}\NormalTok{, }\StringTok{"75%"}\NormalTok{, }\StringTok{"max"}\NormalTok{]]}
+\NormalTok{)}
+\CommentTok{# Tratamentos}
+\NormalTok{t1_deliv }\OperatorTok{=}\NormalTok{ deliv[deliv[}\StringTok{"treatment"}\NormalTok{].isin([}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{])]}
+\NormalTok{t2_deliv }\OperatorTok{=}\NormalTok{ deliv[deliv[}\StringTok{"treatment"}\NormalTok{].isin([}\DecValTok{0}\NormalTok{,}\DecValTok{2}\NormalTok{])]}
+\NormalTok{t3_deliv }\OperatorTok{=}\NormalTok{ deliv[deliv[}\StringTok{"treatment"}\NormalTok{].isin([}\DecValTok{0}\NormalTok{,}\DecValTok{3}\NormalTok{])]}
+\NormalTok{t5_deliv }\OperatorTok{=}\NormalTok{ deliv[deliv[}\StringTok{"treatment"}\NormalTok{].isin([}\DecValTok{0}\NormalTok{,}\DecValTok{5}\NormalTok{])]}
+
+\CommentTok{# Variaveis de interesse}
+\NormalTok{Y1 }\OperatorTok{=}\NormalTok{ t1_deliv[}\StringTok{"resp_A"}\NormalTok{].values}
+\NormalTok{T1 }\OperatorTok{=}\NormalTok{ t1_deliv[}\StringTok{"delivered"}\NormalTok{].values}
+\NormalTok{X1 }\OperatorTok{=}\NormalTok{ t1_deliv[X_cols].values}
+\NormalTok{X1_treat}\OperatorTok{=}\NormalTok{X1[T1 }\OperatorTok{==} \DecValTok{1}\NormalTok{]}
+
+\NormalTok{Y2 }\OperatorTok{=}\NormalTok{ t2_deliv[}\StringTok{"resp_A"}\NormalTok{].values}
+\NormalTok{T2 }\OperatorTok{=}\NormalTok{ t2_deliv[}\StringTok{"delivered"}\NormalTok{].values}
+\NormalTok{X2 }\OperatorTok{=}\NormalTok{ t2_deliv[X_cols].values}
+\NormalTok{X2_treat}\OperatorTok{=}\NormalTok{X2[T2 }\OperatorTok{==} \DecValTok{1}\NormalTok{]}
+
+\NormalTok{Y3 }\OperatorTok{=}\NormalTok{ t3_deliv[}\StringTok{"resp_A"}\NormalTok{].values}
+\NormalTok{T3 }\OperatorTok{=}\NormalTok{ t3_deliv[}\StringTok{"delivered"}\NormalTok{].values}
+\NormalTok{X3 }\OperatorTok{=}\NormalTok{ t3_deliv[X_cols].values}
+\NormalTok{X3_treat}\OperatorTok{=}\NormalTok{X3[T3 }\OperatorTok{==} \DecValTok{1}\NormalTok{]}
+
+\NormalTok{Y5 }\OperatorTok{=}\NormalTok{ t5_deliv[}\StringTok{"resp_A"}\NormalTok{].values}
+\NormalTok{T5 }\OperatorTok{=}\NormalTok{ t5_deliv[}\StringTok{"delivered"}\NormalTok{].values}
+\NormalTok{X5 }\OperatorTok{=}\NormalTok{ t5_deliv[X_cols].values}
+\NormalTok{X5_treat}\OperatorTok{=}\NormalTok{X5[T5 }\OperatorTok{==} \DecValTok{1}\NormalTok{]}
+
+\CommentTok{# ForestDML() = CausalForest()??}
+\CommentTok{# ForestDML eh muito mais rapido que CausalForest com resultados }
+\CommentTok{# semelhantes para a interpretacao via arvore}
+
+\CommentTok{# DML com regressao logistica para E[T|X,W] e Floresta Aleatoria para}
+\CommentTok{# E[Y|X,W]. Modelo final para Theta(X) eh escolhido por floresta}
+\NormalTok{dml}\OperatorTok{=}\NormalTok{ForestDML(}
+\NormalTok{    model_t}\OperatorTok{=}\NormalTok{LogisticRegression(),}
+\NormalTok{    model_y}\OperatorTok{=}\NormalTok{RandomForestRegressor(),}
+\NormalTok{    discrete_treatment}\OperatorTok{=}\VariableTok{True}\NormalTok{,}
+\NormalTok{    n_estimators}\OperatorTok{=}\DecValTok{1000}\NormalTok{,}
+\NormalTok{    subsample_fr}\OperatorTok{=}\FloatTok{0.7}\NormalTok{,}
+\NormalTok{    min_samples_leaf}\OperatorTok{=}\DecValTok{20}\NormalTok{,}
+\NormalTok{    n_crossfit_splits}\OperatorTok{=}\DecValTok{3}\NormalTok{,}
+\NormalTok{    n_jobs}\OperatorTok{=-}\DecValTok{1}
+\NormalTok{)}
+\CommentTok{# DML para T1}
+\NormalTok{dml.fit(Y1, T1, X1, inference}\OperatorTok{=}\StringTok{'auto'}\NormalTok{)}
+\NormalTok{dml1_eff}\OperatorTok{=}\NormalTok{dml.effect(X1, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\NormalTok{dml1_eff_treat}\OperatorTok{=}\NormalTok{dml.effect(X1_treat, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\SpecialStringTok{f"ATE T1 por DML: }\SpecialCharTok{\{np.}\NormalTok{mean(dml1_eff)}\SpecialCharTok{\}}\CharTok{\textbackslash{}n}\SpecialStringTok{ATT T1 por DML: }\SpecialCharTok{\{np.}\NormalTok{mean(dml1_eff_treat)}\SpecialCharTok{\}}\SpecialStringTok{"}\NormalTok{)}
+\NormalTok{dml1_inf}\OperatorTok{=}\NormalTok{dml.effect_inference(X_eval.values)}
+\NormalTok{dml1_summary}\OperatorTok{=}\NormalTok{dml1_inf.summary_frame(alpha}\OperatorTok{=}\FloatTok{0.05}\NormalTok{)[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"pvalue"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]]}
+\NormalTok{dml1_summary.index}\OperatorTok{=}\NormalTok{X_eval.index}
+\NormalTok{dml1_summary[}\StringTok{"star"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml1_summary[}\StringTok{"pvalue"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(stars)}
+\NormalTok{dml1_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml1_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(format_float, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{dml1_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml1_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{str}\NormalTok{.cat(dml1_summary[}\StringTok{"star"}\NormalTok{])}
+\NormalTok{dml1_summary[}\StringTok{"stderr"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml1_summary[}\StringTok{"stderr"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(surr_parenthesis, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{dml1_summary}\OperatorTok{=}\NormalTok{dml1_summary[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]].stack()}
+\NormalTok{dml1_summary.name}\OperatorTok{=}\StringTok{"Correio"}
+
+\CommentTok{# DML para T2}
+\NormalTok{dml.fit(Y2, T2, X2, inference}\OperatorTok{=}\StringTok{'auto'}\NormalTok{)}
+\NormalTok{dml2_eff}\OperatorTok{=}\NormalTok{dml.effect(X2, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\NormalTok{dml2_eff_treat}\OperatorTok{=}\NormalTok{dml.effect(X2_treat, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\SpecialStringTok{f"ATE T2 por DML: }\SpecialCharTok{\{np.}\NormalTok{mean(dml2_eff)}\SpecialCharTok{\}}\CharTok{\textbackslash{}n}\SpecialStringTok{ATT T2 por DML: }\SpecialCharTok{\{np.}\NormalTok{mean(dml2_eff_treat)}\SpecialCharTok{\}}\SpecialStringTok{"}\NormalTok{)}
+\NormalTok{dml2_inf}\OperatorTok{=}\NormalTok{dml.effect_inference(X_eval.values)}
+\NormalTok{dml2_summary}\OperatorTok{=}\NormalTok{dml2_inf.summary_frame(alpha}\OperatorTok{=}\FloatTok{0.05}\NormalTok{)[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"pvalue"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]]}
+\NormalTok{dml2_summary.index}\OperatorTok{=}\NormalTok{X_eval.index}
+\NormalTok{dml2_summary[}\StringTok{"star"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml2_summary[}\StringTok{"pvalue"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(stars)}
+\NormalTok{dml2_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml2_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(format_float, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{dml2_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml2_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{str}\NormalTok{.cat(dml2_summary[}\StringTok{"star"}\NormalTok{])}
+\NormalTok{dml2_summary[}\StringTok{"stderr"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml2_summary[}\StringTok{"stderr"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(surr_parenthesis, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{dml2_summary}\OperatorTok{=}\NormalTok{dml2_summary[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]].stack()}
+\NormalTok{dml2_summary.name}\OperatorTok{=}\StringTok{"Ameaça"}
+
+\CommentTok{# Interpretacao por arvore de decisao para T2}
+\NormalTok{interp }\OperatorTok{=}\NormalTok{ SingleTreeCateInterpreter(}
+\NormalTok{    include_model_uncertainty}\OperatorTok{=}\VariableTok{False}\NormalTok{, }
+\NormalTok{    max_depth}\OperatorTok{=}\DecValTok{3}\NormalTok{, }
+\NormalTok{    min_samples_leaf}\OperatorTok{=}\DecValTok{10}\NormalTok{)}
+\NormalTok{interp.interpret(dml, X2)}
+\NormalTok{fig, ax1 }\OperatorTok{=}\NormalTok{ plt.subplots(figsize}\OperatorTok{=}\NormalTok{(}\DecValTok{25}\NormalTok{,}\DecValTok{6}\NormalTok{))}
+\NormalTok{interp.plot(feature_names}\OperatorTok{=}\NormalTok{X_cols, fontsize}\OperatorTok{=}\DecValTok{12}\NormalTok{, ax}\OperatorTok{=}\NormalTok{ax1)}
+\NormalTok{fig.savefig(}\StringTok{"Figs/fig_tree_dml.png"}\NormalTok{)}
+
+\CommentTok{# DML para T3}
+\NormalTok{dml.fit(Y3, T3, X3, inference}\OperatorTok{=}\StringTok{'auto'}\NormalTok{)}
+\NormalTok{dml3_eff}\OperatorTok{=}\NormalTok{dml.effect(X3, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\NormalTok{dml3_eff_treat}\OperatorTok{=}\NormalTok{dml.effect(X3_treat, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\SpecialStringTok{f"ATE T3 por DML: }\SpecialCharTok{\{np.}\NormalTok{mean(dml3_eff)}\SpecialCharTok{\}}\CharTok{\textbackslash{}n}\SpecialStringTok{ATT T3 por DML: }\SpecialCharTok{\{np.}\NormalTok{mean(dml3_eff_treat)}\SpecialCharTok{\}}\SpecialStringTok{"}\NormalTok{)}
+\NormalTok{dml3_inf}\OperatorTok{=}\NormalTok{dml.effect_inference(X_eval.values)}
+\NormalTok{dml3_summary}\OperatorTok{=}\NormalTok{dml3_inf.summary_frame(alpha}\OperatorTok{=}\FloatTok{0.05}\NormalTok{)[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"pvalue"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]]}
+\NormalTok{dml3_summary.index}\OperatorTok{=}\NormalTok{X_eval.index}
+\NormalTok{dml3_summary[}\StringTok{"star"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml3_summary[}\StringTok{"pvalue"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(stars)}
+\NormalTok{dml3_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml3_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(format_float, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{dml3_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml3_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{str}\NormalTok{.cat(dml3_summary[}\StringTok{"star"}\NormalTok{])}
+\NormalTok{dml3_summary[}\StringTok{"stderr"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml3_summary[}\StringTok{"stderr"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(surr_parenthesis, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{dml3_summary}\OperatorTok{=}\NormalTok{dml3_summary[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]].stack()}
+\NormalTok{dml3_summary.name}\OperatorTok{=}\StringTok{"Info"}
+
+\CommentTok{# DML para T5}
+\NormalTok{dml.fit(Y5, T5, X5, inference}\OperatorTok{=}\StringTok{'auto'}\NormalTok{)}
+\NormalTok{dml5_eff}\OperatorTok{=}\NormalTok{dml.effect(X5, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\NormalTok{dml5_eff_treat}\OperatorTok{=}\NormalTok{dml.effect(X5_treat, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\SpecialStringTok{f"ATE T5 por DML: }\SpecialCharTok{\{np.}\NormalTok{mean(dml5_eff)}\SpecialCharTok{\}}\CharTok{\textbackslash{}n}\SpecialStringTok{ATT T5 por DML: }\SpecialCharTok{\{np.}\NormalTok{mean(dml5_eff_treat)}\SpecialCharTok{\}}\SpecialStringTok{"}\NormalTok{)}
+\NormalTok{dml5_inf}\OperatorTok{=}\NormalTok{dml.effect_inference(X_eval.values)}
+\NormalTok{dml5_summary}\OperatorTok{=}\NormalTok{dml5_inf.summary_frame(alpha}\OperatorTok{=}\FloatTok{0.05}\NormalTok{)[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"pvalue"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]]}
+\NormalTok{dml5_summary.index}\OperatorTok{=}\NormalTok{X_eval.index}
+\NormalTok{dml5_summary[}\StringTok{"star"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml5_summary[}\StringTok{"pvalue"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(stars)}
+\NormalTok{dml5_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml5_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(format_float, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{dml5_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml5_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{str}\NormalTok{.cat(dml5_summary[}\StringTok{"star"}\NormalTok{])}
+\NormalTok{dml5_summary[}\StringTok{"stderr"}\NormalTok{]}\OperatorTok{=}\NormalTok{dml5_summary[}\StringTok{"stderr"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(surr_parenthesis, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{dml5_summary}\OperatorTok{=}\NormalTok{dml5_summary[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]].stack()}
+\NormalTok{dml5_summary.name}\OperatorTok{=}\StringTok{"Moral"}
+
+\CommentTok{# Melhora consumo de memoria}
+\KeywordTok{del}\NormalTok{ dml}
+\NormalTok{collected}\OperatorTok{=}\NormalTok{gc.collect()}
+\CommentTok{# ATE}
+\NormalTok{dml_ate}\OperatorTok{=}\NormalTok{[np.mean(x) }\ControlFlowTok{for}\NormalTok{ x }\KeywordTok{in}\NormalTok{ [dml1_eff, dml2_eff, dml3_eff, dml5_eff]]}
+\CommentTok{# ATT}
+\NormalTok{dml_att}\OperatorTok{=}\NormalTok{[np.mean(x) }\ControlFlowTok{for}\NormalTok{ x }\KeywordTok{in} 
+\NormalTok{    [dml1_eff_treat, dml2_eff_treat, dml3_eff_treat, dml5_eff_treat]]}
+
+\NormalTok{treatments_list}\OperatorTok{=}\NormalTok{[}\StringTok{"Correio"}\NormalTok{, }\StringTok{"Ameaça"}\NormalTok{, }\StringTok{"Info"}\NormalTok{, }\StringTok{"Moral"}\NormalTok{]}
+\NormalTok{dml_effect}\OperatorTok{=}\NormalTok{pd.DataFrame(\{}\StringTok{"ATE"}\NormalTok{: dml_ate, }\StringTok{"ATT"}\NormalTok{: dml_att\}, index}\OperatorTok{=}\NormalTok{treatments_list)}
+
+\CommentTok{# Quantis das variaveis utilizadas para aferir heterogeneidade}
+\NormalTok{X_eval.transpose().to_latex(}
+\NormalTok{    buf}\OperatorTok{=}\StringTok{"Tables/tab_het_vars.tex"}\NormalTok{,}
+\NormalTok{    decimal}\OperatorTok{=}\StringTok{","}\NormalTok{,}
+\NormalTok{    caption}\OperatorTok{=}\StringTok{"Variáveis utilizadas para identificar heterogeneidade nos efeitos."}\NormalTok{,}
+\NormalTok{    label}\OperatorTok{=}\StringTok{"tab:het-vars"}
+\NormalTok{)}
+
+\CommentTok{# Sumario com os resultados para os 4 tratamentos}
+\NormalTok{dml_summary}\OperatorTok{=}\NormalTok{(}
+\NormalTok{    pd.concat(}
+\NormalTok{        [dml1_summary, dml2_summary, dml3_summary, dml5_summary],}
+\NormalTok{        axis}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\NormalTok{    .reset_index()}
+\NormalTok{    .rename(columns}\OperatorTok{=}\NormalTok{\{}\StringTok{"level_0"}\NormalTok{: }\StringTok{"X"}\NormalTok{\})}
+\NormalTok{    .drop(columns}\OperatorTok{=}\StringTok{"level_1"}\NormalTok{)}
+\NormalTok{)}
+
+\NormalTok{dml_summary.to_latex(}
+\NormalTok{    buf}\OperatorTok{=}\StringTok{"Tables/tab_dml_summary.tex"}\NormalTok{,}
+\NormalTok{    decimal}\OperatorTok{=}\StringTok{","}\NormalTok{,}
+\NormalTok{    caption}\OperatorTok{=}\StringTok{"Efeitos heterogêneos do tratamento estimados por Double Machine Learning."}\NormalTok{,}
+\NormalTok{    label}\OperatorTok{=}\StringTok{"tab:dml-summary"}\NormalTok{,}
+\NormalTok{    index}\OperatorTok{=}\VariableTok{False}
+\NormalTok{)}
+\CommentTok{# Nota: os estágios de previsão foram floresta aleatória para $E[Y|\textbackslash{}bfx]$}
+\CommentTok{# e regressão logística para $E[T|\textbackslash{}bfx]$. O modelo final para o efeito }
+\CommentTok{# condicional do tratamento, $\textbackslash{}theta(\textbackslash{}bfx)$, é uma floresta aleatória.}
+
+\CommentTok{################################################################}
+\CommentTok{# Metodos com variaveis Instrumentais}
+\CommentTok{################################################################}
+
+\CommentTok{################################################################}
+\CommentTok{# Considerando o atrito e estimando os efeitos }
+\CommentTok{################################################################}
+\NormalTok{iv}\OperatorTok{=}\NormalTok{data.copy()}
+\NormalTok{iv[}\StringTok{"delivered"}\NormalTok{] }\OperatorTok{=}\NormalTok{ iv[}\StringTok{"delivered"}\NormalTok{].fillna(}\DecValTok{0}\NormalTok{)}
+\CommentTok{# Para avaliacao de heterogeneidade}
+\NormalTok{X_eval }\OperatorTok{=}\NormalTok{ (iv[X_cols]}
+\NormalTok{    .describe()}
+\NormalTok{    .loc[[}\StringTok{"mean"}\NormalTok{, }\StringTok{"min"}\NormalTok{, }\StringTok{"25%"}\NormalTok{, }\StringTok{"50%"}\NormalTok{, }\StringTok{"75%"}\NormalTok{, }\StringTok{"max"}\NormalTok{]]}
+\NormalTok{)}
+\CommentTok{# Tratamentos}
+\NormalTok{t1_iv }\OperatorTok{=}\NormalTok{ iv[iv[}\StringTok{"treatment"}\NormalTok{].isin([}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{])]}
+\NormalTok{t2_iv }\OperatorTok{=}\NormalTok{ iv[iv[}\StringTok{"treatment"}\NormalTok{].isin([}\DecValTok{0}\NormalTok{,}\DecValTok{2}\NormalTok{])]}
+\NormalTok{t3_iv }\OperatorTok{=}\NormalTok{ iv[iv[}\StringTok{"treatment"}\NormalTok{].isin([}\DecValTok{0}\NormalTok{,}\DecValTok{3}\NormalTok{])]}
+\NormalTok{t5_iv }\OperatorTok{=}\NormalTok{ iv[iv[}\StringTok{"treatment"}\NormalTok{].isin([}\DecValTok{0}\NormalTok{,}\DecValTok{5}\NormalTok{])]}
+
+\CommentTok{# Definindo as variaveis}
+\NormalTok{Z1 }\OperatorTok{=}\NormalTok{ t1_iv[}\StringTok{"treatment"}\NormalTok{]}
+\NormalTok{T1 }\OperatorTok{=}\NormalTok{ t1_iv[}\StringTok{"delivered"}\NormalTok{]}
+\NormalTok{Y1 }\OperatorTok{=}\NormalTok{ t1_iv[}\StringTok{"resp_A"}\NormalTok{]}
+\NormalTok{X1 }\OperatorTok{=}\NormalTok{ t1_iv[X_cols]}
+
+\NormalTok{Z2 }\OperatorTok{=}\NormalTok{ t2_iv[}\StringTok{"treatment"}\NormalTok{]}
+\NormalTok{T2 }\OperatorTok{=}\NormalTok{ t2_iv[}\StringTok{"delivered"}\NormalTok{]}
+\NormalTok{Y2 }\OperatorTok{=}\NormalTok{ t2_iv[}\StringTok{"resp_A"}\NormalTok{]}
+\NormalTok{X2 }\OperatorTok{=}\NormalTok{ t2_iv[X_cols]}
+
+\NormalTok{Z3 }\OperatorTok{=}\NormalTok{ t3_iv[}\StringTok{"treatment"}\NormalTok{]}
+\NormalTok{T3 }\OperatorTok{=}\NormalTok{ t3_iv[}\StringTok{"delivered"}\NormalTok{]}
+\NormalTok{Y3 }\OperatorTok{=}\NormalTok{ t3_iv[}\StringTok{"resp_A"}\NormalTok{]}
+\NormalTok{X3 }\OperatorTok{=}\NormalTok{ t3_iv[X_cols]}
+
+\NormalTok{Z5 }\OperatorTok{=}\NormalTok{ t5_iv[}\StringTok{"treatment"}\NormalTok{]}
+\NormalTok{T5 }\OperatorTok{=}\NormalTok{ t5_iv[}\StringTok{"delivered"}\NormalTok{]}
+\NormalTok{Y5 }\OperatorTok{=}\NormalTok{ t5_iv[}\StringTok{"resp_A"}\NormalTok{]}
+\NormalTok{X5 }\OperatorTok{=}\NormalTok{ t5_iv[X_cols]}
+
+\CommentTok{# Modelos para E[Y|X] e E[T|Z,X]}
+\NormalTok{lgb_YX_par }\OperatorTok{=}\NormalTok{ \{}
+    \StringTok{"metric"}\NormalTok{: }\StringTok{"rmse"}\NormalTok{,}
+    \StringTok{"learning_rate"}\NormalTok{: }\FloatTok{0.1}\NormalTok{,}
+    \StringTok{"num_leaves"}\NormalTok{: }\DecValTok{30}\NormalTok{,}
+    \StringTok{"max_depth"}\NormalTok{: }\DecValTok{5}
+\NormalTok{\}}
+
+\NormalTok{lgb_TXZ_par }\OperatorTok{=}\NormalTok{ \{}
+    \StringTok{"objective"}\NormalTok{: }\StringTok{"binary"}\NormalTok{,}
+    \StringTok{"metric"}\NormalTok{: }\StringTok{"auc"}\NormalTok{,}
+    \StringTok{"learning_rate"}\NormalTok{: }\FloatTok{0.1}\NormalTok{,}
+    \StringTok{"num_leaves"}\NormalTok{: }\DecValTok{30}\NormalTok{,}
+    \StringTok{"max_depth"}\NormalTok{: }\DecValTok{5}
+\NormalTok{\}}
+
+\NormalTok{lgb_theta_par }\OperatorTok{=}\NormalTok{ \{}
+    \StringTok{"metric"}\NormalTok{: }\StringTok{"rmse"}\NormalTok{,}
+    \StringTok{"learning_rate"}\NormalTok{: }\FloatTok{0.1}\NormalTok{,}
+    \StringTok{"num_leaves"}\NormalTok{: }\DecValTok{30}\NormalTok{,}
+    \StringTok{"max_depth"}\NormalTok{: }\DecValTok{3}
+\NormalTok{\}}
+
+\NormalTok{modelTXZ }\OperatorTok{=}\NormalTok{ lgb.LGBMClassifier(}\OperatorTok{**}\NormalTok{lgb_TXZ_par)}
+\NormalTok{modelYX }\OperatorTok{=}\NormalTok{ lgb.LGBMRegressor(}\OperatorTok{**}\NormalTok{lgb_YX_par)}
+\NormalTok{modelZX }\OperatorTok{=}\NormalTok{ lgb.LGBMClassifier(}\OperatorTok{**}\NormalTok{lgb_TXZ_par)}
+\CommentTok{# Modelo inicial para o efeito heterogeneo}
+\CommentTok{# Sera melhorado pelo algoritmo Double Robust IV}
+\NormalTok{pre_theta }\OperatorTok{=}\NormalTok{ lgb.LGBMRegressor(}\OperatorTok{**}\NormalTok{lgb_theta_par)}
+
+\CommentTok{## Modelo 2-stages Least Squares}
+
+\CommentTok{# Variaveis com amostra completa}
+\NormalTok{Z }\OperatorTok{=}\NormalTok{ iv[[}\StringTok{"mailing"}\NormalTok{, }\StringTok{"threat"}\NormalTok{, }\StringTok{"info"}\NormalTok{, }\StringTok{"appeal"}\NormalTok{, }\StringTok{"i_tinf"}\NormalTok{, }\StringTok{"i_tapp"}\NormalTok{]]}
+\NormalTok{T }\OperatorTok{=}\NormalTok{ Z.multiply(iv[}\StringTok{"delivered"}\NormalTok{], axis}\OperatorTok{=}\DecValTok{0}\NormalTok{)}
+\NormalTok{Y }\OperatorTok{=}\NormalTok{ iv[}\StringTok{"resp_A"}\NormalTok{]}
+\NormalTok{model_2sls }\OperatorTok{=}\NormalTok{ IV2SLS(Y, exog}\OperatorTok{=}\NormalTok{np.ones(}\BuiltInTok{len}\NormalTok{(Y)), endog}\OperatorTok{=}\NormalTok{T, instruments}\OperatorTok{=}\NormalTok{Z)}
+\NormalTok{iv2sls_fit }\OperatorTok{=}\NormalTok{ model_2sls.fit(debiased}\OperatorTok{=}\VariableTok{True}\NormalTok{)}
+\NormalTok{iv2sls_params}\OperatorTok{=}\NormalTok{iv2sls_fit.params[[}\StringTok{"mailing"}\NormalTok{, }\StringTok{"threat"}\NormalTok{, }\StringTok{"info"}\NormalTok{, }\StringTok{"appeal"}\NormalTok{]]}
+\CommentTok{# Soma os valores para ter mesma interpretacao que DML e DRIV}
+\NormalTok{iv2sls_params[}\StringTok{"threat"}\NormalTok{]}\OperatorTok{=}\NormalTok{iv2sls_params[}\StringTok{"threat"}\NormalTok{]}\OperatorTok{+}\NormalTok{iv2sls_params[}\StringTok{"mailing"}\NormalTok{]}
+\NormalTok{iv2sls_params[}\StringTok{"info"}\NormalTok{]}\OperatorTok{=}\NormalTok{iv2sls_params[}\StringTok{"info"}\NormalTok{]}\OperatorTok{+}\NormalTok{iv2sls_params[}\StringTok{"mailing"}\NormalTok{]}
+\NormalTok{iv2sls_params[}\StringTok{"appeal"}\NormalTok{]}\OperatorTok{=}\NormalTok{iv2sls_params[}\StringTok{"appeal"}\NormalTok{]}\OperatorTok{+}\NormalTok{iv2sls_params[}\StringTok{"mailing"}\NormalTok{]}
+\NormalTok{treatments_list}\OperatorTok{=}\NormalTok{[}\StringTok{"Correio"}\NormalTok{, }\StringTok{"Ameaça"}\NormalTok{, }\StringTok{"Info"}\NormalTok{, }\StringTok{"Moral"}\NormalTok{]}
+\NormalTok{iv2sls_effect}\OperatorTok{=}\NormalTok{pd.DataFrame(\{}\StringTok{"LATE"}\NormalTok{: iv2sls_params.values\}, index}\OperatorTok{=}\NormalTok{treatments_list)}
+
+\CommentTok{## Modelo DRIV}
+
+\CommentTok{# Treina o modelo DRIV mais flexivel. Theta(X) pode ser um modelo}
+\CommentTok{# flexivel (nao parametrico, ie. floresta aleatoria) de X}
+\CommentTok{# ATENCAO: leva bastante tempo para rodar}
+\NormalTok{driv1 }\OperatorTok{=}\NormalTok{ IntentToTreatDRIV(}
+\NormalTok{    model_Y_X}\OperatorTok{=}\NormalTok{modelYX,}
+\NormalTok{    model_T_XZ}\OperatorTok{=}\NormalTok{modelTXZ,}
+\NormalTok{    flexible_model_effect}\OperatorTok{=}\NormalTok{pre_theta,}
+\NormalTok{    n_splits}\OperatorTok{=}\DecValTok{3}\NormalTok{,}
+\NormalTok{    featurizer}\OperatorTok{=}\VariableTok{None} \CommentTok{#PolynomialFeatures(degree=1, include_bias=False)}
+\NormalTok{)}
+\CommentTok{# Mesmo modelo para cada tratamento}
+\NormalTok{driv2}\OperatorTok{=}\NormalTok{deepcopy(driv1)}
+\NormalTok{driv3}\OperatorTok{=}\NormalTok{deepcopy(driv1)}
+\NormalTok{driv5}\OperatorTok{=}\NormalTok{deepcopy(driv1)}
+
+\CommentTok{# DRIV para T1}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Iniciando fit de DRIV T1}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv1.fit(Y1, T1, Z}\OperatorTok{=}\NormalTok{Z1, X}\OperatorTok{=}\NormalTok{X1, inference}\OperatorTok{=}\StringTok{"bootstrap"}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Fim do fit de DRIV T1}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv1_eff}\OperatorTok{=}\NormalTok{driv1.effect(X1, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\SpecialStringTok{f"LATE T1 por DRIV: }\SpecialCharTok{\{np.}\NormalTok{mean(driv1_eff)}\SpecialCharTok{\}}\SpecialStringTok{"}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Iniciando inferencia de DRIV T1}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv1_inf}\OperatorTok{=}\NormalTok{driv1.effect_inference(X_eval)}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Fim da inferencia de DRIV T1}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv1_summary}\OperatorTok{=}\NormalTok{driv1_inf.summary_frame(alpha}\OperatorTok{=}\FloatTok{0.05}\NormalTok{)[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"pvalue"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]]}
+\NormalTok{driv1_summary.index}\OperatorTok{=}\NormalTok{X_eval.index}
+\NormalTok{driv1_summary[}\StringTok{"star"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv1_summary[}\StringTok{"pvalue"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(stars)}
+\NormalTok{driv1_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv1_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(format_float, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{driv1_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv1_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{str}\NormalTok{.cat(driv1_summary[}\StringTok{"star"}\NormalTok{])}
+\NormalTok{driv1_summary[}\StringTok{"stderr"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv1_summary[}\StringTok{"stderr"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(surr_parenthesis, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{driv1_summary}\OperatorTok{=}\NormalTok{driv1_summary[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]].stack()}
+\NormalTok{driv1_summary.name}\OperatorTok{=}\StringTok{"Correio"}
+\CommentTok{# Melhora o consumo de memoria}
+\KeywordTok{del}\NormalTok{ driv1}
+\NormalTok{collected}\OperatorTok{=}\NormalTok{gc.collect()}
+
+\CommentTok{# DRIV para T2}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Iniciando fit de DRIV T2}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv2.fit(Y2, T2, Z}\OperatorTok{=}\NormalTok{Z2, X}\OperatorTok{=}\NormalTok{X2, inference}\OperatorTok{=}\StringTok{"bootstrap"}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Fim do fit de DRIV T2}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv2_eff}\OperatorTok{=}\NormalTok{driv2.effect(X2, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\SpecialStringTok{f"LATE T2 por DRIV: }\SpecialCharTok{\{np.}\NormalTok{mean(driv2_eff)}\SpecialCharTok{\}}\SpecialStringTok{"}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Iniciando inferencia de DRIV T2}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv2_inf}\OperatorTok{=}\NormalTok{driv2.effect_inference(X_eval)}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Fim da inferencia de DRIV T2}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv2_summary}\OperatorTok{=}\NormalTok{driv2_inf.summary_frame(alpha}\OperatorTok{=}\FloatTok{0.05}\NormalTok{)[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"pvalue"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]]}
+\NormalTok{driv2_summary.index}\OperatorTok{=}\NormalTok{X_eval.index}
+\NormalTok{driv2_summary[}\StringTok{"star"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv2_summary[}\StringTok{"pvalue"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(stars)}
+\NormalTok{driv2_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv2_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(format_float, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{driv2_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv2_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{str}\NormalTok{.cat(driv2_summary[}\StringTok{"star"}\NormalTok{])}
+\NormalTok{driv2_summary[}\StringTok{"stderr"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv2_summary[}\StringTok{"stderr"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(surr_parenthesis, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{driv2_summary}\OperatorTok{=}\NormalTok{driv2_summary[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]].stack()}
+\NormalTok{driv2_summary.name}\OperatorTok{=}\StringTok{"Ameaça"}
+\CommentTok{# Interpretacao causal por arvore de decisao}
+\NormalTok{interp }\OperatorTok{=}\NormalTok{ SingleTreeCateInterpreter(}
+\NormalTok{    include_model_uncertainty}\OperatorTok{=}\VariableTok{False}\NormalTok{, }
+\NormalTok{    max_depth}\OperatorTok{=}\DecValTok{3}\NormalTok{, }
+\NormalTok{    min_samples_leaf}\OperatorTok{=}\DecValTok{10}
+\NormalTok{)}
+\NormalTok{interp.interpret(driv2, X2)}
+\NormalTok{fig, ax1 }\OperatorTok{=}\NormalTok{ plt.subplots(figsize}\OperatorTok{=}\NormalTok{(}\DecValTok{25}\NormalTok{,}\DecValTok{6}\NormalTok{))}
+\NormalTok{interp.plot(feature_names}\OperatorTok{=}\NormalTok{X2.columns, fontsize}\OperatorTok{=}\DecValTok{12}\NormalTok{, ax}\OperatorTok{=}\NormalTok{ax1)}
+\NormalTok{fig.savefig(}\StringTok{"Figs/fig_tree_driv.png"}\NormalTok{)}
+\CommentTok{# Melhora o consumo de memoria}
+\KeywordTok{del}\NormalTok{ driv2}
+\NormalTok{collected}\OperatorTok{=}\NormalTok{gc.collect()}
+
+\CommentTok{# DRIV para T3}
+\NormalTok{driv3.fit(Y3, T3, Z}\OperatorTok{=}\NormalTok{Z3, X}\OperatorTok{=}\NormalTok{X3, inference}\OperatorTok{=}\StringTok{"bootstrap"}\NormalTok{)}
+\NormalTok{driv3_eff}\OperatorTok{=}\NormalTok{driv3.effect(X3, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\SpecialStringTok{f"LATE T3 por DRIV: }\SpecialCharTok{\{np.}\NormalTok{mean(driv3_eff)}\SpecialCharTok{\}}\SpecialStringTok{"}\NormalTok{)}
+\NormalTok{driv3_inf}\OperatorTok{=}\NormalTok{driv3.effect_inference(X_eval)}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Fim da inferencia de DRIV T3}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv3_summary}\OperatorTok{=}\NormalTok{driv3_inf.summary_frame(alpha}\OperatorTok{=}\FloatTok{0.05}\NormalTok{)[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"pvalue"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]]}
+\NormalTok{driv3_summary.index}\OperatorTok{=}\NormalTok{X_eval.index}
+\NormalTok{driv3_summary[}\StringTok{"star"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv3_summary[}\StringTok{"pvalue"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(stars)}
+\NormalTok{driv3_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv3_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(format_float, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{driv3_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv3_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{str}\NormalTok{.cat(driv3_summary[}\StringTok{"star"}\NormalTok{])}
+\NormalTok{driv3_summary[}\StringTok{"stderr"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv3_summary[}\StringTok{"stderr"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(surr_parenthesis, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{driv3_summary}\OperatorTok{=}\NormalTok{driv3_summary[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]].stack()}
+\NormalTok{driv3_summary.name}\OperatorTok{=}\StringTok{"Info"}
+\CommentTok{# Melhora o consumo de memoria}
+\KeywordTok{del}\NormalTok{ driv3}
+\NormalTok{collected}\OperatorTok{=}\NormalTok{gc.collect()}
+
+\CommentTok{# DRIV para T5}
+\NormalTok{driv5.fit(Y5, T5, Z}\OperatorTok{=}\NormalTok{Z5, X}\OperatorTok{=}\NormalTok{X5, inference}\OperatorTok{=}\StringTok{"bootstrap"}\NormalTok{)}
+\NormalTok{driv5_eff}\OperatorTok{=}\NormalTok{driv5.effect(X5, T0}\OperatorTok{=}\DecValTok{0}\NormalTok{, T1}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\BuiltInTok{print}\NormalTok{(}\SpecialStringTok{f"LATE T5 por DRIV: }\SpecialCharTok{\{np.}\NormalTok{mean(driv5_eff)}\SpecialCharTok{\}}\SpecialStringTok{"}\NormalTok{)}
+\NormalTok{driv5_inf}\OperatorTok{=}\NormalTok{driv5.effect_inference(X_eval)}
+\BuiltInTok{print}\NormalTok{(}\StringTok{"Fim da inferencia de DRIV T5}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+\NormalTok{driv5_summary}\OperatorTok{=}\NormalTok{driv5_inf.summary_frame(alpha}\OperatorTok{=}\FloatTok{0.05}\NormalTok{)[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"pvalue"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]]}
+\NormalTok{driv5_summary.index}\OperatorTok{=}\NormalTok{X_eval.index}
+\NormalTok{driv5_summary[}\StringTok{"star"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv5_summary[}\StringTok{"pvalue"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(stars)}
+\NormalTok{driv5_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv5_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(format_float, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{driv5_summary[}\StringTok{"point_estimate"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv5_summary[}\StringTok{"point_estimate"}\NormalTok{].}\BuiltInTok{str}\NormalTok{.cat(driv5_summary[}\StringTok{"star"}\NormalTok{])}
+\NormalTok{driv5_summary[}\StringTok{"stderr"}\NormalTok{]}\OperatorTok{=}\NormalTok{driv5_summary[}\StringTok{"stderr"}\NormalTok{].}\BuiltInTok{apply}\NormalTok{(surr_parenthesis, digits}\OperatorTok{=}\DecValTok{4}\NormalTok{)}
+\NormalTok{driv5_summary}\OperatorTok{=}\NormalTok{driv5_summary[[}\StringTok{"point_estimate"}\NormalTok{, }\StringTok{"stderr"}\NormalTok{]].stack()}
+\NormalTok{driv5_summary.name}\OperatorTok{=}\StringTok{"Moral"}
+\CommentTok{# Melhora o consumo de memoria}
+\KeywordTok{del}\NormalTok{ driv5}
+\NormalTok{collected}\OperatorTok{=}\NormalTok{gc.collect()}
+
+\CommentTok{# LATE}
+\NormalTok{driv_late}\OperatorTok{=}\NormalTok{[np.mean(x) }\ControlFlowTok{for}\NormalTok{ x }\KeywordTok{in} 
+\NormalTok{    [driv1_eff, driv2_eff, driv3_eff, driv5_eff]]}
+\NormalTok{treatments_list}\OperatorTok{=}\NormalTok{[}\StringTok{"Correio"}\NormalTok{, }\StringTok{"Ameaça"}\NormalTok{, }\StringTok{"Info"}\NormalTok{, }\StringTok{"Moral"}\NormalTok{]}
+\NormalTok{driv_effect}\OperatorTok{=}\NormalTok{pd.DataFrame(\{}\StringTok{"LATE"}\NormalTok{: driv_late\}, index}\OperatorTok{=}\NormalTok{treatments_list)}
+\CommentTok{# driv_effect.to_latex(}
+\CommentTok{#     buf="Tables/tab_driv_late.tex",}
+\CommentTok{#     decimal=",",}
+\CommentTok{#     caption="LATE estimado por Doubly Robust IV para diferentes tratamentos.",}
+\CommentTok{#     label="tab:driv-late"}
+\CommentTok{# )}
+
+\CommentTok{# Junta todos os efeitos em uma tabela unica}
+\NormalTok{all_effects}\OperatorTok{=}\NormalTok{(dml_effect}
+\NormalTok{    .merge(iv2sls_effect, left_index}\OperatorTok{=}\VariableTok{True}\NormalTok{, right_index}\OperatorTok{=}\VariableTok{True}\NormalTok{)}
+\NormalTok{    .merge(driv_effect, left_index}\OperatorTok{=}\VariableTok{True}\NormalTok{, right_index}\OperatorTok{=}\VariableTok{True}\NormalTok{)}
+\NormalTok{)}
+\NormalTok{mindex}\OperatorTok{=}\NormalTok{pd.MultiIndex.from_tuples([}
+\NormalTok{    (}\StringTok{"ForestDML"}\NormalTok{, }\StringTok{"ATE"}\NormalTok{), }
+\NormalTok{    (}\StringTok{"ForestDML"}\NormalTok{, }\StringTok{"ATT"}\NormalTok{), }
+\NormalTok{    (}\StringTok{"IV2SLS"}\NormalTok{, }\StringTok{"LATE"}\NormalTok{), }
+\NormalTok{    (}\StringTok{"DRIV"}\NormalTok{, }\StringTok{"LATE"}\NormalTok{)], }
+\NormalTok{    names}\OperatorTok{=}\NormalTok{[}\StringTok{"Modelo"}\NormalTok{, }\StringTok{"Efeito"}\NormalTok{])}
+\NormalTok{all_effects.columns}\OperatorTok{=}\NormalTok{mindex}
+\NormalTok{all_effects.to_latex(}
+\NormalTok{    buf}\OperatorTok{=}\StringTok{"Tables/tab_all_effects.tex"}\NormalTok{,}
+\NormalTok{    decimal}\OperatorTok{=}\StringTok{","}\NormalTok{,}
+\NormalTok{    caption}\OperatorTok{=}\StringTok{"Efeitos médios dos tratamentos estimados pelos métodos de ForestDML, IV2SLS e DRIV."}\NormalTok{,}
+\NormalTok{    label}\OperatorTok{=}\StringTok{"tab:all-effects"}\NormalTok{,}
+\NormalTok{    float_format}\OperatorTok{=}\StringTok{"}\SpecialCharTok{%.4f}\StringTok{"}\NormalTok{,}
+\NormalTok{    multirow}\OperatorTok{=}\VariableTok{True}\NormalTok{,}
+\NormalTok{    multicolumn}\OperatorTok{=}\VariableTok{True}\NormalTok{,}
+\NormalTok{    multicolumn_format}\OperatorTok{=}\StringTok{"c"}
+\NormalTok{)}
+
+\CommentTok{# Sumario com os resultados para os 4 tratamentos}
+\NormalTok{driv_summary}\OperatorTok{=}\NormalTok{(}
+\NormalTok{    pd.concat(}
+\NormalTok{        [driv1_summary, driv2_summary, driv3_summary, driv5_summary],}
+\NormalTok{        axis}\OperatorTok{=}\DecValTok{1}\NormalTok{)}
+\NormalTok{    .reset_index()}
+\NormalTok{    .rename(columns}\OperatorTok{=}\NormalTok{\{}\StringTok{"level_0"}\NormalTok{: }\StringTok{"X"}\NormalTok{\})}
+\NormalTok{    .drop(columns}\OperatorTok{=}\StringTok{"level_1"}\NormalTok{)}
+\NormalTok{)}
+
+\NormalTok{driv_summary.to_latex(}
+\NormalTok{    buf}\OperatorTok{=}\StringTok{"Tables/tab_driv_summary.tex"}\NormalTok{,}
+\NormalTok{    decimal}\OperatorTok{=}\StringTok{","}\NormalTok{,}
+\NormalTok{    caption}\OperatorTok{=}\StringTok{"Efeitos heterogêneos do tratamento estimados por Doubly Robust IV."}\NormalTok{,}
+\NormalTok{    label}\OperatorTok{=}\StringTok{"tab:driv-summary"}\NormalTok{,}
+\NormalTok{    index}\OperatorTok{=}\VariableTok{False}
+\NormalTok{)}
+\CommentTok{# Nota: os estágios de previsão foram gradient boosted tree (regressão) para $E[Y|\textbackslash{}bfx]$}
+\CommentTok{# e gbm (classificação) $E[T|\textbackslash{}bfx]$. O modelo final para o efeito }
+\CommentTok{# condicional do tratamento, $\textbackslash{}theta(\textbackslash{}bfx)$, também foi uma gbm-regressão, porém mais rasa,}
+\CommentTok{# com apenas 3 níveis de profundidade.}
+
+\CommentTok{# Salva objetos }
+\CommentTok{# with open("modelos.pkl", "wb") as f:}
+\CommentTok{#     pickle.dump([model_dml, model_ldriv, model_driv], f)}
+
+\CommentTok{# Carrega objetos}
+\CommentTok{# with open("modelos.pkl", "wb") as f:}
+\CommentTok{#     model_dml, model_ldriv, model_driv = pickle.load(f)}
+
+
+\CommentTok{# Floresta Causal}
+\CommentTok{# cf=CausalForest(}
+\CommentTok{#     n_trees=200,}
+\CommentTok{#     min_leaf_size=15,}
+\CommentTok{#     max_depth=8,}
+\CommentTok{#     model_T=LogisticRegression(),}
+\CommentTok{#     model_Y=RandomForestRegressor(),}
+\CommentTok{#     discrete_treatment=True,}
+\CommentTok{#     random_state=123}
+\CommentTok{# )}
+\CommentTok{# cf.fit(Y, T, X)}
+\CommentTok{# cf_inf=cf.effect_inference(X_eval.values)}
+\CommentTok{# cf_const_eff=cf.const_marginal_effect(X)}
+\CommentTok{# print(f"ATE por Causal Forest \{np.mean(cf_const_eff)\}")}
+\CommentTok{# # cf_eff=cf.effect(X_eval.values)}
+\CommentTok{# # cf_lb, cf_ub=cf.effect_interval(X_eval.values)}
+\CommentTok{# # cf_dict=\{"Estimate": cf_eff, "LB": cf_lb, "UB": cf_ub\}}
+\CommentTok{# # cf_df=pd.DataFrame(cf_dict, index=X_eval.index)}
+\CommentTok{# cf_summary=cf_inf.summary_frame(alpha=0.05)}
+\CommentTok{# cf_summary.index=X_eval.index}
+\CommentTok{# cf_summary}
+\CommentTok{# cf_summary.to_latex(}
+\CommentTok{#     buf="Tables/tab_cf_summary.tex",}
+\CommentTok{#     decimal=",",}
+\CommentTok{#     caption="Efeitos heterogêneos do tratamento T1 estimados por Floresta Causal.",}
+\CommentTok{#     label="tab:cf-summary"}
+\CommentTok{# )}
+\CommentTok{# # Floresta causal nao eh muito robusta a especificacao do modelo}
+\CommentTok{# # E[Y|X,W] (Random Forest ou Lasso)}
+
+\CommentTok{# # Interpretacao causal por arvore de decisao}
+\CommentTok{# interp = SingleTreeCateInterpreter(}
+\CommentTok{#     include_model_uncertainty=False, }
+\CommentTok{#     max_depth=3, min_samples_leaf=10)}
+\CommentTok{# interp.interpret(cf, X)}
+\CommentTok{# fig, ax1 = plt.subplots(figsize=(25,6))}
+\CommentTok{# interp.plot(feature_names=X_cols, fontsize=12, ax=ax1)}
+\CommentTok{# fig.savefig("Figs/fig_tree_cf.png")}
+
+\CommentTok{# ## Modelo DMLATEIV}
+\CommentTok{# model_dml = DMLATEIV(}
+\CommentTok{#     model_Y_W=modelYX,}
+\CommentTok{#     model_T_W=modelTXZ,}
+\CommentTok{#     model_Z_W=modelZX,}
+\CommentTok{#     discrete_treatment=True,}
+\CommentTok{#     discrete_instrument=True,}
+\CommentTok{#     n_splits=5}
+\CommentTok{# )}
+\CommentTok{# model_dml.fit(Y, T, Z, W=None, inference="bootstrap")}
+\CommentTok{# model_dml.const_marginal_effect_interval(alpha=0.05)}
+\end{Highlighting}
+\end{Shaded}

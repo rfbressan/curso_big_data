@@ -1,0 +1,21 @@
+---
+title: "Untitled"
+author: "Rafael"
+date: "06/01/2021"
+output: 
+  pdf_document:
+    keep_tex: true
+    highlight: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r scriptr, code=readLines("script_R.R"), eval = FALSE}
+
+```
+
+```{python scriptpy, code=readLines("script_py.py"), eval = FALSE}
+
+```

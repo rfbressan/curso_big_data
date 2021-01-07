@@ -1,10 +1,15 @@
-# Roda metodos de ML para inferencia causal
-# Dados do paper: Fellner et. al. 2003
+# Metodos de Machine Learning para inferencia causal
+# com dados de Fellner et all (2013)
+# Autor: Rafael Felipe Bressan
+# Arquivo: script_py.py
+# Script Python para o trabalho monografico: Inferência Causal com Machine 
+# Learning uma aplicacao para evasao fiscal
+# Pós-Graduacao Lato Sensu em Ciencia de Dados e Big Data PUC-MG
+# Ano: 2021
 
 # importa bibliotecas necessarias
-# import os
-# import urllib.request
-import pickle
+import gc
+from copy import deepcopy
 import numpy as np
 import pandas as pd 
 
@@ -53,6 +58,7 @@ X_cols = ["gender", "pop_density2005",
     "compliance", "compliance_t", "vo_r", "vo_cr", "vo_cl", "vo_l", 
     "inc_aver", "edu_aver", "edu_lo", "edu_mi", "edu_hi", 
     "age_aver", "age0_30", "age30_60", "nat_A", "nat_EU", "nat_nonEU"]
+    
 ################################################################
 # Ignorando o atrito e estimando os efeitos apenas para 
 # delivered == 1
@@ -176,6 +182,9 @@ dml5_summary["stderr"]=dml5_summary["stderr"].apply(surr_parenthesis, digits=4)
 dml5_summary=dml5_summary[["point_estimate", "stderr"]].stack()
 dml5_summary.name="Moral"
 
+# Melhora consumo de memoria
+del dml
+collected=gc.collect()
 # ATE
 dml_ate=[np.mean(x) for x in [dml1_eff, dml2_eff, dml3_eff, dml5_eff]]
 # ATT
@@ -183,17 +192,7 @@ dml_att=[np.mean(x) for x in
     [dml1_eff_treat, dml2_eff_treat, dml3_eff_treat, dml5_eff_treat]]
 
 treatments_list=["Correio", "Ameaça", "Info", "Moral"]
-treatments_df=pd.DataFrame({"ATE": dml_ate, "ATT": dml_att}, index=treatments_list)
-treatments_df.to_latex(
-    buf="Tables/tab_dml_effects.tex",
-    decimal=",",
-    caption="ATE e ATT estimados por DML para diferentes tratamentos.",
-    label="tab:dml-effects"
-)
-
-# ATE mais alto que ATT? Como explicar isso sem recorrer a spillover?
-# Non-compliance alterou a aleatorizacao do experimento, portanto
-# houve auto-selecao nos dados e ATT pode diferir de ATNT
+dml_effect=pd.DataFrame({"ATE": dml_ate, "ATT": dml_att}, index=treatments_list)
 
 # Quantis das variaveis utilizadas para aferir heterogeneidade
 X_eval.transpose().to_latex(
@@ -296,32 +295,47 @@ modelZX = lgb.LGBMClassifier(**lgb_TXZ_par)
 pre_theta = lgb.LGBMRegressor(**lgb_theta_par)
 
 ## Modelo 2-stages Least Squares
+
 # Variaveis com amostra completa
 Z = iv[["mailing", "threat", "info", "appeal", "i_tinf", "i_tapp"]]
 T = Z.multiply(iv["delivered"], axis=0)
 Y = iv["resp_A"]
 model_2sls = IV2SLS(Y, exog=np.ones(len(Y)), endog=T, instruments=Z)
 iv2sls_fit = model_2sls.fit(debiased=True)
-with open("Tables/tab_iv2sls.tex", "w") as f:
-    f.write(iv2sls_fit.summary.as_latex())
+iv2sls_params=iv2sls_fit.params[["mailing", "threat", "info", "appeal"]]
+# Soma os valores para ter mesma interpretacao que DML e DRIV
+iv2sls_params["threat"]=iv2sls_params["threat"]+iv2sls_params["mailing"]
+iv2sls_params["info"]=iv2sls_params["info"]+iv2sls_params["mailing"]
+iv2sls_params["appeal"]=iv2sls_params["appeal"]+iv2sls_params["mailing"]
+treatments_list=["Correio", "Ameaça", "Info", "Moral"]
+iv2sls_effect=pd.DataFrame({"LATE": iv2sls_params.values}, index=treatments_list)
 
 ## Modelo DRIV
 
 # Treina o modelo DRIV mais flexivel. Theta(X) pode ser um modelo
 # flexivel (nao parametrico, ie. floresta aleatoria) de X
 # ATENCAO: leva bastante tempo para rodar
-driv = IntentToTreatDRIV(
+driv1 = IntentToTreatDRIV(
     model_Y_X=modelYX,
     model_T_XZ=modelTXZ,
     flexible_model_effect=pre_theta,
     n_splits=3,
     featurizer=None #PolynomialFeatures(degree=1, include_bias=False)
 )
+# Mesmo modelo para cada tratamento
+driv2=deepcopy(driv1)
+driv3=deepcopy(driv1)
+driv5=deepcopy(driv1)
+
 # DRIV para T1
-driv.fit(Y1, T1, Z=Z1, X=X1, inference="bootstrap")
-driv1_eff=driv.effect(X1, T0=0, T1=1)
+print("Iniciando fit de DRIV T1\n")
+driv1.fit(Y1, T1, Z=Z1, X=X1, inference="bootstrap")
+print("Fim do fit de DRIV T1\n")
+driv1_eff=driv1.effect(X1, T0=0, T1=1)
 print(f"LATE T1 por DRIV: {np.mean(driv1_eff)}")
-driv1_inf=driv.effect_inference(X_eval)
+print("Iniciando inferencia de DRIV T1\n")
+driv1_inf=driv1.effect_inference(X_eval)
+print("Fim da inferencia de DRIV T1\n")
 driv1_summary=driv1_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
 driv1_summary.index=X_eval.index
 driv1_summary["star"]=driv1_summary["pvalue"].apply(stars)
@@ -330,12 +344,19 @@ driv1_summary["point_estimate"]=driv1_summary["point_estimate"].str.cat(driv1_su
 driv1_summary["stderr"]=driv1_summary["stderr"].apply(surr_parenthesis, digits=4)
 driv1_summary=driv1_summary[["point_estimate", "stderr"]].stack()
 driv1_summary.name="Correio"
+# Melhora o consumo de memoria
+del driv1
+collected=gc.collect()
 
 # DRIV para T2
-driv.fit(Y2, T2, Z=Z2, X=X2, inference="bootstrap")
-driv2_eff=driv.effect(X2, T0=0, T1=1)
+print("Iniciando fit de DRIV T2\n")
+driv2.fit(Y2, T2, Z=Z2, X=X2, inference="bootstrap")
+print("Fim do fit de DRIV T2\n")
+driv2_eff=driv2.effect(X2, T0=0, T1=1)
 print(f"LATE T2 por DRIV: {np.mean(driv2_eff)}")
-driv2_inf=driv.effect_inference(X_eval)
+print("Iniciando inferencia de DRIV T2\n")
+driv2_inf=driv2.effect_inference(X_eval)
+print("Fim da inferencia de DRIV T2\n")
 driv2_summary=driv2_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
 driv2_summary.index=X_eval.index
 driv2_summary["star"]=driv2_summary["pvalue"].apply(stars)
@@ -350,16 +371,20 @@ interp = SingleTreeCateInterpreter(
     max_depth=3, 
     min_samples_leaf=10
 )
-interp.interpret(driv, X2)
+interp.interpret(driv2, X2)
 fig, ax1 = plt.subplots(figsize=(25,6))
 interp.plot(feature_names=X2.columns, fontsize=12, ax=ax1)
 fig.savefig("Figs/fig_tree_driv.png")
+# Melhora o consumo de memoria
+del driv2
+collected=gc.collect()
 
 # DRIV para T3
-driv.fit(Y3, T3, Z=Z3, X=X3, inference="bootstrap")
-driv3_eff=driv.effect(X3, T0=0, T1=1)
+driv3.fit(Y3, T3, Z=Z3, X=X3, inference="bootstrap")
+driv3_eff=driv3.effect(X3, T0=0, T1=1)
 print(f"LATE T3 por DRIV: {np.mean(driv3_eff)}")
-driv3_inf=driv.effect_inference(X_eval)
+driv3_inf=driv3.effect_inference(X_eval)
+print("Fim da inferencia de DRIV T3\n")
 driv3_summary=driv3_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
 driv3_summary.index=X_eval.index
 driv3_summary["star"]=driv3_summary["pvalue"].apply(stars)
@@ -368,12 +393,16 @@ driv3_summary["point_estimate"]=driv3_summary["point_estimate"].str.cat(driv3_su
 driv3_summary["stderr"]=driv3_summary["stderr"].apply(surr_parenthesis, digits=4)
 driv3_summary=driv3_summary[["point_estimate", "stderr"]].stack()
 driv3_summary.name="Info"
+# Melhora o consumo de memoria
+del driv3
+collected=gc.collect()
 
 # DRIV para T5
-driv.fit(Y5, T5, Z=Z5, X=X5, inference="bootstrap")
-driv5_eff=driv.effect(X5, T0=0, T1=1)
+driv5.fit(Y5, T5, Z=Z5, X=X5, inference="bootstrap")
+driv5_eff=driv5.effect(X5, T0=0, T1=1)
 print(f"LATE T5 por DRIV: {np.mean(driv5_eff)}")
-driv5_inf=driv.effect_inference(X_eval)
+driv5_inf=driv5.effect_inference(X_eval)
+print("Fim da inferencia de DRIV T5\n")
 driv5_summary=driv5_inf.summary_frame(alpha=0.05)[["point_estimate", "pvalue", "stderr"]]
 driv5_summary.index=X_eval.index
 driv5_summary["star"]=driv5_summary["pvalue"].apply(stars)
@@ -382,17 +411,43 @@ driv5_summary["point_estimate"]=driv5_summary["point_estimate"].str.cat(driv5_su
 driv5_summary["stderr"]=driv5_summary["stderr"].apply(surr_parenthesis, digits=4)
 driv5_summary=driv5_summary[["point_estimate", "stderr"]].stack()
 driv5_summary.name="Moral"
+# Melhora o consumo de memoria
+del driv5
+collected=gc.collect()
 
 # LATE
 driv_late=[np.mean(x) for x in 
     [driv1_eff, driv2_eff, driv3_eff, driv5_eff]]
 treatments_list=["Correio", "Ameaça", "Info", "Moral"]
-treatments_df=pd.DataFrame({"LATE": driv_late}, index=treatments_list)
-treatments_df.to_latex(
-    buf="Tables/tab_driv_late.tex",
+driv_effect=pd.DataFrame({"LATE": driv_late}, index=treatments_list)
+# driv_effect.to_latex(
+#     buf="Tables/tab_driv_late.tex",
+#     decimal=",",
+#     caption="LATE estimado por Doubly Robust IV para diferentes tratamentos.",
+#     label="tab:driv-late"
+# )
+
+# Junta todos os efeitos em uma tabela unica
+all_effects=(dml_effect
+    .merge(iv2sls_effect, left_index=True, right_index=True)
+    .merge(driv_effect, left_index=True, right_index=True)
+)
+mindex=pd.MultiIndex.from_tuples([
+    ("ForestDML", "ATE"), 
+    ("ForestDML", "ATT"), 
+    ("IV2SLS", "LATE"), 
+    ("DRIV", "LATE")], 
+    names=["Modelo", "Efeito"])
+all_effects.columns=mindex
+all_effects.to_latex(
+    buf="Tables/tab_all_effects.tex",
     decimal=",",
-    caption="LATE estimado por \textit{Doubly Robust} IV para diferentes tratamentos.",
-    label="tab:driv-late"
+    caption="Efeitos médios dos tratamentos estimados pelos métodos de ForestDML, IV2SLS e DRIV.",
+    label="tab:all-effects",
+    float_format="%.4f",
+    multirow=True,
+    multicolumn=True,
+    multicolumn_format="c"
 )
 
 # Sumario com os resultados para os 4 tratamentos
@@ -409,7 +464,7 @@ driv_summary.to_latex(
     buf="Tables/tab_driv_summary.tex",
     decimal=",",
     caption="Efeitos heterogêneos do tratamento estimados por Doubly Robust IV.",
-    label="tab:dml-summary",
+    label="tab:driv-summary",
     index=False
 )
 # Nota: os estágios de previsão foram gradient boosted tree (regressão) para $E[Y|\bfx]$
@@ -418,8 +473,8 @@ driv_summary.to_latex(
 # com apenas 3 níveis de profundidade.
 
 # Salva objetos 
-with open("modelos.pkl", "wb") as f:
-    pickle.dump([model_dml, model_ldriv, model_driv], f)
+# with open("modelos.pkl", "wb") as f:
+#     pickle.dump([model_dml, model_ldriv, model_driv], f)
 
 # Carrega objetos
 # with open("modelos.pkl", "wb") as f:
