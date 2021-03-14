@@ -1,0 +1,38 @@
+\mode<presentation> {
+  \usetheme[block=fill]{metropolis}
+}
+
+%%% FGV colors for metropolis
+% As cores vou deixar definido, estão certas as
+% cores da FGV. Só saber como usar agora
+\definecolor{brunoblue}{HTML}{182936}
+\definecolor{brunomarroon}{HTML}{704730}
+\definecolor{brunolightgray}{HTML}{E6E6E6}
+\definecolor{fgvblue}{HTML}{1C2F67}
+\definecolor{fgvlightblue}{HTML}{0096D6}
+
+% Structure
+% \setbeamercolor{structure}{fg=fgvblue}
+\setbeamercolor{normal text}{fg=fgvblue}
+% \setbeamercolor{separator}{fg=brunomarroon, bg=brunomarroon}
+% \setbeamercolor{footline}{bg=fgvlightblue}
+
+% % Blocs
+% \setbeamercolor{block body}{bg=brunolightgray}
+% \setbeamercolor{block title}{bg=fgvblue, fg=white} 
+
+% Math font
+\usepackage{unicode-math}
+\usepackage{FiraSans}
+\setmainfont{Fira Sans Light}
+% \setmathfont{STIX Two Math}
+
+% \usetheme{Bruno}
+% \background{fig/FGV-Logo_small.png}
+\usepackage{booktabs}
+\usepackage{threeparttablex}
+
+% novos comandos
+\newcommand{\bfx}{\mathbf{X}}
+\newcommand{\bfw}{\mathbf{W}}
+\DeclareMathOperator*{\argmin}{argmin}

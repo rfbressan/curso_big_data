@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>INFERÊNCIA CAUSAL COM    MACHINE LEARNING</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Rafael Felipe Bressan" />
+    <meta name="date" content="2021-03-14" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <link rel="stylesheet" href="fgv2-theme.css" type="text/css" />
+    <link rel="stylesheet" href="fgv2-fonts.css" type="text/css" />
+    <link rel="stylesheet" href="scrollable.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# INFERÊNCIA CAUSAL COM <img src='Figs/puc-logo-w.png' width=130 style='float:right'/> <br> MACHINE LEARNING
+## uma aplicação para evasão fiscal <br>
+<hr>
+### Rafael Felipe Bressan
+### PUC-MG
+### 2021-03-14
+
+---
+
+
+
+
+# Motivação
+
+Causalidade
+
+- Limite de velocidade reduz as mortes no trânsito?
+
+- Permissão para cobrança de bagagem aérea reduziu o preço das tarifas?
+
+- O recebimento de uma carta-cobrança da Receita Federal faz com que o contribuinte recolha seus impostos devidos?
+
+- Essas questões são **causais** em sua natureza. Requerem conhecimento do processo de geração dos dados. Suas respostas não podem ser calculadas apenas com os dados observados.
+
+---
+# Causalidade
+
+- Análise causal requer manipulação/intervenção no processo gerador
+
+- Uma quebra estrutural é induzida
+
+- Correlações anteriores não são mais válidas
+
+- Dados puramente observacionais não carregam toda a informação necessária
+
+---
+# _Machine Learning sem Viés_
+
+`$$Y_i=f(\mathbf{X}_i, \epsilon_i;\theta)$$`
+- Causalidade requer inferência sobre parâmetros da distribuição, `\(\theta\)`
+
+- _Machine Learning_ tradicional oferece correlações a partir de dados observacionais
+
+- Inferência `\(\neq\)` previsão
+  + ML: minimiza `\(\hat e = \hat y - Y\)`
+  + Análise causal: estima `\(\hat\theta\)` com intervalo de confiança
+  
+- Boa previsão **não garante** correta estimação de parâmetros
+
+- .red[Viés de regularização]: `\(\hat f_1(\cdot;\hat\theta_1)\approx \hat f_2(\cdot;\hat\theta_2)\)` mesmo se `\(\hat\theta_1\neq\hat\theta_2\)`
+
+---
+# _Machine Learning sem Viés_
+
+- Como fazer com que algoritmos de ML façam estimação causal não-viesada?
+
+- Fronteira do conhecimento em inferência causal
+  + [Chernozhukov, Chetverikov, Demirer, et al. (2018)](#bib-Chernozhukov2018) - _Double Machine Learning_
+  + [Wager and Athey (2018a)](#bib-Wager2018) - _Causal Forests_
+  + [Syrgkanis, Lei, Oprescu, et al. (2019)](#bib-Syrgkanis2019) - _Doubly Robust Instrumental Variables_
+
+---
+class: clear, middle, center
+
+background-image: url(Figs/experimento.jpeg)
+background-size: cover
+
+# .shade[Experimento Randomizado]
+
+---
+# Experimento Randomizado
+
+- Experimentos randomizados são o padrão-ouro para inferência causal
+
+- Re-analisaremos o trabalho de [Fellner, Sausgruber, and Traxler (2013)](#bib-Fellner2013) 
+
+- Correspondências fiscais para mais de 50.000 contribuintes
+
+- Analisar efeitos de variação no conteúdo
+  + Valores médios por tipo de carta
+  + Heterogeneidade nos efeitos
+
+---
+# Descrição do Experimento
+
+| Tratamento | Descrição   | Observações | Proporção  |
+| :--------- | :---------- | ----------: | ---------: |
+| T0         | Sem Correio | 2586        | 0\.0512099 |
+| T1         | Correio     | 7984        | 0\.1581053 |
+| T2         | Ameaça      | 7821        | 0\.1548774 |
+| T3         | Info        | 7998        | 0\.1583825 |
+| T4         | InfoAmeaça  | 8101        | 0\.1604222 |
+| T5         | Moral       | 8084        | 0\.1600855 |
+| T6         | MoralAmeaça | 7924        | 0\.1569171 |
+
+---
+# Problema de Atrito
+
+- Atrito: contribuintes que deveriam receber a correspondência mas não foram encontrados
+- Pode comprometer a aleatorização do experimento e **gerar viés** na inferência
+
+| Tratamento | Descrição   | Cartas | Não Entregues | Taxa Atrito |
+| :--------- | :---------- | -----: | ------------: | ----------: |
+| T1         | Correio     | 7984   | 1126          | 0\.1410     |
+| T2         | Ameaça      | 7821   | 1127          | 0\.1441     |
+| T3         | Info        | 7998   | 1173          | 0\.1467     |
+| T4         | InfoAmeaça  | 8101   | 1141          | 0\.1408     |
+| T5         | Moral       | 8084   | 1164          | 0\.1440     |
+| T6         | MoralAmeaça | 7924   | 1174          | 0\.1482     |
+
+---
+# Análise Exploratória
+
+- Uma boa aleatorização implica em balanceamento das covariadas _(features)_ entre os tratamentos
+
+| Tratamento | Descrição   | Gênero  | Idade    | Renda       | População   | Dens. pop. | Compliance |
+| :--------- | :---------- | ------: | -------: | ----------: | ----------: | ---------: | ---------: |
+| T0         | Sem Correio | 0\.6458 | 48\.0170 | 20928\.4068 | 45815\.2715 | 8\.1711    | 0\.9355    |
+| T1         | Correio     | 0\.6338 | 47\.9969 | 20878\.9958 | 43377\.1935 | 8\.5625    | 0\.9352    |
+| T2         | Ameaça      | 0\.6367 | 47\.9931 | 20901\.1614 | 44542\.5883 | 7\.9605    | 0\.9346    |
+| T3         | Info        | 0\.6260 | 48\.0300 | 20882\.6636 | 43903\.0189 | 8\.1142    | 0\.9347    |
+| T4         | InfoAmeaça  | 0\.6335 | 48\.0051 | 20879\.6138 | 43319\.4736 | 8\.3540    | 0\.9352    |
+| T5         | Moral       | 0\.6251 | 47\.9982 | 20888\.4584 | 44301\.3718 | 8\.4832    | 0\.9343    |
+| T6         | MoralAmeaça | 0\.6422 | 47\.9904 | 20876\.3062 | 43610\.1972 | 8\.0468    | 0\.9343    |
+| Anova:     | p-values    | 0\.1715 | 0\.3993  | 0\.9393     | 0\.7577     | 0\.5795    | 0\.8614    |
+
+---
+# Análise Exploratória
+
+- Atrito pode quebrar o balanceamento e comprometer a aleatorização
+
+| Tratamento    | Gênero  | Idade    | Renda       | População   | Dens. pop. | Compliance |
+| :------------ | ------: | -------: | ----------: | ----------: | ---------: | ---------: |
+| T0            | 0\.6458 | 48\.0170 | 20928\.4068 | 45815\.2715 | 8\.1711    | 0\.9355    |
+| T1            | 0\.6403 | 47\.7868 | 21100\.3921 | 52084\.9822 | 7\.6001    | 0\.9322    |
+| T2            | 0\.6211 | 47\.7127 | 21106\.0117 | 48882\.0302 | 6\.5860    | 0\.9337    |
+| T3            | 0\.6138 | 47\.8580 | 21077\.8894 | 51027\.8338 | 6\.6317    | 0\.9313    |
+| T4            | 0\.6240 | 47\.8056 | 20945\.2352 | 48251\.5259 | 6\.5957    | 0\.9318    |
+| T5            | 0\.6177 | 47\.7952 | 20864\.3756 | 43273\.7019 | 6\.3919    | 0\.9308    |
+| T6            | 0\.6320 | 47\.8117 | 20966\.9995 | 46539\.3467 | 6\.4614    | 0\.9324    |
+| Anova p-valor | 0\.4319 | 0\.0000  | 0\.0095     | 0\.0936     | 0\.0094    | 0\.1122    |
+
+---
+class: clear, middle, center
+
+background-image: url(Figs/modelos3.jpg)
+background-size: cover
+
+# .shade[Modelos e Resultados]
+
+---
+# Estimandos Causais
+
+- _Framework_ de Resultados potenciais. Observamos apenas um resultado potencial dado um tratamento. .red[Problema fundamental da inferência causal]
+
+`$$Y_i=D_i\cdot Y_i(1)+(1-D_i)\cdot Y_i(0), \quad D_i\in\{0, 1\}$$`
+
+- Estimandos Casusais:
+
+$$
+`\begin{align*}
+    ATE&amp;=\mathbb{E}[Y_i(1)-Y_i(0)], \qquad\qquad\, CATE(x)=\mathbb{E}[Y_i(1)-Y_i(0)|\mathbf{X}=x]\\
+    ATT&amp;=\mathbb{E}[Y_i(1)-Y_i(0)|D_i=1], \quad CATT(x)=\mathbb{E}[Y_i(1)-Y_i(0)|\mathbf{X}=x, D_i=1]\\
+    \\
+     LAT&amp;E(x)=\frac{\mathbb{E}[Y_i(1, D_i(1))-Y_i(0, D_i(0))]}{\mathbb{E}[D_i(1)-D_i(0)]}
+\end{align*}`
+$$
+
+---
+# Hipóteses de Identificação
+
+- SUTVA: **não existe interferência** entre os indivíduos tratados e não tratados. Não pode haver efeitos de transbordamento do tratamento de algum indivíduo para outro que esteja no grupo de controle
+
+- CIA _(unconfoundedness)_: **condicionado às características observadas**, `\(\mathbf{X}_i\)`, os resultados potenciais são **independentes** do tratamento `\(D_i\)`,  `\(\{Y_i(1), Y_i(0)\} \perp D_i|\mathbf{X}_i\)`
+
+Quando usamos variáveis instrumentais
+
+- Exclusão do instrumento: designação para tratamento **não afeta diretamente** os resultados potenciais
+
+- Relevância do instrumento: designação para o tratamento aumenta a probabilidade de ser tratado. `\(\mathbb{E}[D_i(1)-D_i(0)]&gt;0\)`
+
+---
+# Modelo ForestDML
+
+- Modelo parcialmente linear. Tratamento `\(T\)` é exógeno, não é necessária instrumentalização
+
+$$
+`\begin{align*}
+    Y&amp;=\theta(\mathbf{x}) \cdot T+g(\mathbf{x}, \mathbf{w})+\epsilon  &amp;\mathbb{E}[\epsilon \mid \mathbf{x}, \mathbf{w}]=0 \\
+    T&amp;=f(\mathbf{x}, \mathbf{w})+\eta &amp;\mathbb{E}[\eta \mid \mathbf{x}, \mathbf{w}]=0 \\
+    \mathbb{E}&amp;[\eta \cdot \epsilon \mid \mathbf{x}, \mathbf{w}]=0
+\end{align*}`
+$$
+
+- Através de .red[DML] (ortogonalização de Neyman e _cross-fitting_)
+
+$$
+`\begin{equation*}
+\hat{\theta}(x)=\underset{\theta}{argmin} \sum_{i=1}^{n} K_{x}\left(X_{i}\right) \cdot\left(Y_{i}-\hat{q}\left(X_{i}, W_{i}\right)-\theta \cdot\left(T_{i}-\hat{f}\left(X_{i}, W_{i}\right)\right)\right)^{2}
+\end{equation*}`
+$$
+
+- _Kernel_ `\(K_x\)` é uma .red[floresta causal]
+
+---
+# Modelo DRIV
+
+- Tratamento é endógeno. Necessita de variável instrumental
+
+$$
+`\begin{align*}
+    Y&amp;=\theta(\mathbf{x})\cdot T+g(\mathbf{x})+\epsilon, &amp;\mathbb{E}[\epsilon\mid \mathbf{x}, Z]=0\\
+    Z&amp;=m(\mathbf{x})+\eta, &amp;\mathbb{E}[\eta\mid\mathbf{x}]=0\\
+    \mathbb{E}&amp;[\eta\cdot\epsilon\mid \mathbf{x}, Z]=0\\
+    \mathbb{E}&amp;[T\cdot\epsilon\mid\mathbf{x}]\neq 0
+\end{align*}`
+$$
+
+- Estimativa preliminar de `\(\theta(x)\)` e algoritmo _Doubly Robust_
+
+$$
+`\begin{equation*}
+\hat{\theta}_{DR}(x)=\underset{\theta}{argmin}\sum_{i\in\mathcal{I}}\left(\theta_{\text {pre }}(x)+\frac{\left(\hat{\tilde{Y}}_i-\theta_{\text {pre }}(x) \hat{\tilde{T}}_i\right) \hat{\tilde{Z}}_i}{\hat\beta(X_i)}-\theta(X_i)\right)^{2}
+\end{equation*}`
+$$
+
+---
+# Resultados
+
+- Receber uma correspondência .red[tem efeito positivo] sobre o registro para pagamento do tributo
+- Uma **ameaça** na carta aumenta este efeito
+- Informações e apelo moral não possui efeito estatisticamente significativo
+
+|              | OLS          | ForestDML   |             | IV2SLS      | DRIV        |
+| :----------- | :----------: | :---------: | :---------: | :---------: | :---------: |
+|              | ATE          | ATE         | ATT         | LATE        | LATE        |
+| Correio      | 0,0650       | 0,0766      | 0,0766      | 0,0767      | 0,0588      |
+| **Ameaça**   | **0,0750**   | **0,0850**  | **0,0848**  | **0,0872**  | **0,0650**  |
+| Info         | 0,0646       | 0,0762      | 0,0760      | 0,0728      | 0,0547      |
+| Moral        | 0,0648       | 0,0695      | 0,0695      | 0,0724      | 0,0513      |
+
+---
+# Efeitos Heterogêneos
+
+- Existem características que moderam o efeito causal?
+- Heterogeneidade: efeito causal depende de características individuais
+- Regressão linear
+  + .green[Simples estimação e interpretação]
+  + .red[Hipótese a priori das características]
+- _Machine Learning_
+  + .green[descobre a heterogeneidade presente nos dados]
+  + .red[modelos mais complexos]
+- Árvores de decisão são um bom compromisso. Aliam interpretabilidade com algoritmo _data-driven_
+
+---
+# Interpretabilidade
+
+&lt;img src="Figs/fig_tree_driv_cut.png" width="100%" style="display: block; margin: auto;" /&gt;
+
+---
+# Conclusão
+
+- Árvores de decisão são de fácil interpretação. Conjunto de regras
+
+- Fornece informação sobre as características mais relevantes para detectar efeitos heterogêneos
+
+- Os métodos de DML e Causal Forests estimam efeitos livres de viés, heterogêneos e não-paramétricos
+
+- Com base nestas estimações, uma **política ótima** de tratamento pode ser implementada, focando nos indivíduos com maior potencial de resposta
+
+---
+# Referência
+
+&lt;a name=bib-Chernozhukov2018&gt;&lt;/a&gt;[Chernozhukov, V., D.
+Chetverikov, M. Demirer, et al.](#cite-Chernozhukov2018)
+(2018). "Double/debiased machine learning for treatment
+and structural parameters". In: _The Econometrics
+Journal_ 21.1, pp. C1-C68. DOI:
+[10.1111/ectj.12097](https://doi.org/10.1111%2Fectj.12097).
+
+&lt;a name=bib-Fellner2013&gt;&lt;/a&gt;[Fellner, G., R. Sausgruber,
+and C. Traxler](#cite-Fellner2013) (2013). "Testing
+enforcement strategies in the field: Threat, moral appeal
+and social information". In: _Journal of the European
+Economic Association_ 11.3, pp. 634-660.
+
+&lt;a name=bib-Syrgkanis2019&gt;&lt;/a&gt;[Syrgkanis, V., V. Lei, M.
+Oprescu, et al.](#cite-Syrgkanis2019) (2019). _Machine
+Learning Estimation of Heterogeneous Treatment Effects
+with Instruments_. arXiv: 1905.10176 [econ.EM].
+
+&lt;a name=bib-Wager2018&gt;&lt;/a&gt;[Wager, S. and S.
+Athey](#cite-Wager2018) (2018a). "Estimation and
+inference of heterogeneous treatment effects using random
+forests". In: _Journal of the American Statistical
+Association_ 113.523, pp. 1228-1242.
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightLanguage": "R",
+"highlightStyle": "zenburn",
+"highlightLines": true,
+"countIncrementalSlides": false,
+"ratio": "16:9",
+"slideNumberFormat": "<div class=\"progress-bar-container\">\n  <div class=\"progress-bar\" style=\"width: calc(%current% / %total% * 100%);\">\n  </div>\n</div>`\n"
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
