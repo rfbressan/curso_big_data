@@ -63,22 +63,39 @@ Causalidade
 
 - Limite de velocidade reduz as mortes no trânsito?
 
+--
+
 - Permissão para cobrança de bagagem aérea reduziu o preço das tarifas?
 
+--
+
 - O recebimento de uma carta-cobrança da Receita Federal faz com que o contribuinte recolha seus impostos devidos?
+
+--
 
 - Essas questões são **causais** em sua natureza. Requerem conhecimento do processo de geração dos dados. Suas respostas não podem ser calculadas apenas com os dados observados.
 
 ---
 # Causalidade
 
-- Análise causal requer manipulação/intervenção no processo gerador
+- Análise causal requer **manipulação/intervenção** no processo gerador
 
-- Uma quebra estrutural é induzida
+--
+- Uma .red[quebra estrutural] é induzida
 
+--
 - Correlações anteriores não são mais válidas
 
+--
 - Dados puramente observacionais não carregam toda a informação necessária
+
+--
+
+DAG causal de Judea Pearl
+
+```{r dag, out.width="80%"}
+knitr::include_graphics("Figs/dag.png")
+```
 
 ---
 # _Machine Learning sem Viés_
@@ -126,7 +143,7 @@ background-size: cover
 - Analisar efeitos de variação no conteúdo
   + Valores médios por tipo de carta
   + Heterogeneidade nos efeitos
-
+  
 ---
 # Descrição do Experimento
 
@@ -214,11 +231,34 @@ $$
 $$
 
 ---
+# Aleatorização
+
+- Aleatorização do tratamento elimina **viés de seleção**
+  + Indivíduos podem se auto-selecionar ao tratamento devido a características peculiares
+  + Escolha do tratamento está viesado e não é representativo da população
+  
+--
+
+- Tratamento aleatório faz com que, .red[na média], grupo controle e tratamento tenham mesmas características
+
+--
+
+- Diferença entre os grupos resulta no efeito do tratamento
+
+$$\bar Y(1)-\bar Y(0)=\mathbb{E}[Y_i(1)-Y_i(0)]$$
+
+dado que $\mathbb{E}[Y_i(0)|D_i=1]=\mathbb{E}[Y_i(0)|D_i=0]$ devido a aleatorização.
+
+---
 # Hipóteses de Identificação
 
 - SUTVA: **não existe interferência** entre os indivíduos tratados e não tratados. Não pode haver efeitos de transbordamento do tratamento de algum indivíduo para outro que esteja no grupo de controle
 
+--
+
 - CIA _(unconfoundedness)_: **condicionado às características observadas**, $\mathbf{X}_i$, os resultados potenciais são **independentes** do tratamento $D_i$,  $\{Y_i(1), Y_i(0)\} \perp D_i|\mathbf{X}_i$
+
+--
 
 Quando usamos variáveis instrumentais
 
@@ -239,6 +279,8 @@ $$
 \end{align*}
 $$
 
+--
+
 - Através de .red[DML] (ortogonalização de Neyman e _cross-fitting_)
 
 $$
@@ -246,6 +288,8 @@ $$
 \hat{\theta}(x)=\underset{\theta}{argmin} \sum_{i=1}^{n} K_{x}\left(X_{i}\right) \cdot\left(Y_{i}-\hat{q}\left(X_{i}, W_{i}\right)-\theta \cdot\left(T_{i}-\hat{f}\left(X_{i}, W_{i}\right)\right)\right)^{2}
 \end{equation*}
 $$
+
+--
 
 - _Kernel_ $K_x$ é uma .red[floresta causal]
 
@@ -262,6 +306,8 @@ $$
     \mathbb{E}&[T\cdot\epsilon\mid\mathbf{x}]\neq 0
 \end{align*}
 $$
+
+--
 
 - Estimativa preliminar de $\theta(x)$ e algoritmo _Doubly Robust_
 

@@ -4,7 +4,7 @@
     <title>INFERÊNCIA CAUSAL COM    MACHINE LEARNING</title>
     <meta charset="utf-8" />
     <meta name="author" content="Rafael Felipe Bressan" />
-    <meta name="date" content="2021-03-14" />
+    <meta name="date" content="2021-04-06" />
     <script src="libs/header-attrs/header-attrs.js"></script>
     <link rel="stylesheet" href="fgv2-theme.css" type="text/css" />
     <link rel="stylesheet" href="fgv2-fonts.css" type="text/css" />
@@ -19,7 +19,7 @@ class: center, middle, inverse, title-slide
 <hr>
 ### Rafael Felipe Bressan
 ### PUC-MG
-### 2021-03-14
+### 2021-04-06
 
 ---
 
@@ -32,22 +32,37 @@ Causalidade
 
 - Limite de velocidade reduz as mortes no trânsito?
 
+--
+
 - Permissão para cobrança de bagagem aérea reduziu o preço das tarifas?
 
+--
+
 - O recebimento de uma carta-cobrança da Receita Federal faz com que o contribuinte recolha seus impostos devidos?
+
+--
 
 - Essas questões são **causais** em sua natureza. Requerem conhecimento do processo de geração dos dados. Suas respostas não podem ser calculadas apenas com os dados observados.
 
 ---
 # Causalidade
 
-- Análise causal requer manipulação/intervenção no processo gerador
+- Análise causal requer **manipulação/intervenção** no processo gerador
 
-- Uma quebra estrutural é induzida
+--
+- Uma .red[quebra estrutural] é induzida
 
+--
 - Correlações anteriores não são mais válidas
 
+--
 - Dados puramente observacionais não carregam toda a informação necessária
+
+--
+
+DAG causal de Judea Pearl
+
+&lt;img src="Figs/dag.png" width="80%" style="display: block; margin: auto;" /&gt;
 
 ---
 # _Machine Learning sem Viés_
@@ -95,7 +110,7 @@ background-size: cover
 - Analisar efeitos de variação no conteúdo
   + Valores médios por tipo de carta
   + Heterogeneidade nos efeitos
-
+  
 ---
 # Descrição do Experimento
 
@@ -183,11 +198,34 @@ $$
 $$
 
 ---
+# Aleatorização
+
+- Aleatorização do tratamento elimina **viés de seleção**
+  + Indivíduos podem se auto-selecionar ao tratamento devido a características peculiares
+  + Escolha do tratamento está viesado e não é representativo da população
+  
+--
+
+- Tratamento aleatório faz com que, .red[na média], grupo controle e tratamento tenham mesmas características
+
+--
+
+- Diferença entre os grupos resulta no efeito do tratamento
+
+`$$\bar Y(1)-\bar Y(0)=\mathbb{E}[Y_i(1)-Y_i(0)]$$`
+
+dado que `\(\mathbb{E}[Y_i(0)|D_i=1]=\mathbb{E}[Y_i(0)|D_i=0]\)` devido a aleatorização.
+
+---
 # Hipóteses de Identificação
 
 - SUTVA: **não existe interferência** entre os indivíduos tratados e não tratados. Não pode haver efeitos de transbordamento do tratamento de algum indivíduo para outro que esteja no grupo de controle
 
+--
+
 - CIA _(unconfoundedness)_: **condicionado às características observadas**, `\(\mathbf{X}_i\)`, os resultados potenciais são **independentes** do tratamento `\(D_i\)`,  `\(\{Y_i(1), Y_i(0)\} \perp D_i|\mathbf{X}_i\)`
+
+--
 
 Quando usamos variáveis instrumentais
 
@@ -208,6 +246,8 @@ $$
 \end{align*}`
 $$
 
+--
+
 - Através de .red[DML] (ortogonalização de Neyman e _cross-fitting_)
 
 $$
@@ -215,6 +255,8 @@ $$
 \hat{\theta}(x)=\underset{\theta}{argmin} \sum_{i=1}^{n} K_{x}\left(X_{i}\right) \cdot\left(Y_{i}-\hat{q}\left(X_{i}, W_{i}\right)-\theta \cdot\left(T_{i}-\hat{f}\left(X_{i}, W_{i}\right)\right)\right)^{2}
 \end{equation*}`
 $$
+
+--
 
 - _Kernel_ `\(K_x\)` é uma .red[floresta causal]
 
@@ -231,6 +273,8 @@ $$
     \mathbb{E}&amp;[T\cdot\epsilon\mid\mathbf{x}]\neq 0
 \end{align*}`
 $$
+
+--
 
 - Estimativa preliminar de `\(\theta(x)\)` e algoritmo _Doubly Robust_
 
@@ -288,28 +332,29 @@ $$
 # Referência
 
 &lt;a name=bib-Chernozhukov2018&gt;&lt;/a&gt;[Chernozhukov, V., D.
-Chetverikov, M. Demirer, et al.](#cite-Chernozhukov2018)
-(2018). "Double/debiased machine learning for treatment
-and structural parameters". In: _The Econometrics
-Journal_ 21.1, pp. C1-C68. DOI:
+Chetverikov, M. Demirer, et
+al.](#cite-Chernozhukov2018) (2018). "Double/debiased
+machine learning for treatment and structural
+parameters". In: _The Econometrics Journal_ 21.1, pp.
+C1-C68. DOI:
 [10.1111/ectj.12097](https://doi.org/10.1111%2Fectj.12097).
 
-&lt;a name=bib-Fellner2013&gt;&lt;/a&gt;[Fellner, G., R. Sausgruber,
-and C. Traxler](#cite-Fellner2013) (2013). "Testing
-enforcement strategies in the field: Threat, moral appeal
-and social information". In: _Journal of the European
-Economic Association_ 11.3, pp. 634-660.
+&lt;a name=bib-Fellner2013&gt;&lt;/a&gt;[Fellner, G., R.
+Sausgruber, and C. Traxler](#cite-Fellner2013) (2013).
+"Testing enforcement strategies in the field: Threat,
+moral appeal and social information". In: _Journal of
+the European Economic Association_ 11.3, pp. 634-660.
 
-&lt;a name=bib-Syrgkanis2019&gt;&lt;/a&gt;[Syrgkanis, V., V. Lei, M.
-Oprescu, et al.](#cite-Syrgkanis2019) (2019). _Machine
-Learning Estimation of Heterogeneous Treatment Effects
-with Instruments_. arXiv: 1905.10176 [econ.EM].
+&lt;a name=bib-Syrgkanis2019&gt;&lt;/a&gt;[Syrgkanis, V., V. Lei,
+M. Oprescu, et al.](#cite-Syrgkanis2019) (2019).
+_Machine Learning Estimation of Heterogeneous Treatment
+Effects with Instruments_. arXiv: 1905.10176 [econ.EM].
 
 &lt;a name=bib-Wager2018&gt;&lt;/a&gt;[Wager, S. and S.
 Athey](#cite-Wager2018) (2018a). "Estimation and
-inference of heterogeneous treatment effects using random
-forests". In: _Journal of the American Statistical
-Association_ 113.523, pp. 1228-1242.
+inference of heterogeneous treatment effects using
+random forests". In: _Journal of the American
+Statistical Association_ 113.523, pp. 1228-1242.
     </textarea>
 <style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
 <script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
