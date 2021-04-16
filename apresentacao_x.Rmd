@@ -93,7 +93,7 @@ Causalidade
 
 DAG causal de Judea Pearl
 
-```{r dag, out.width="80%"}
+```{r dag, out.width="70%"}
 knitr::include_graphics("Figs/dag.png")
 ```
 
